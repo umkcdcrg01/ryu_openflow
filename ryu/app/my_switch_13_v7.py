@@ -333,7 +333,7 @@ class SimpleSwitch13(app_manager.RyuApp):
                 for dst_dpid in self.arp_reply:
                     # print "dst_dpid=%s dpid=%s" % (dst_dpid, dpid)
                     if dst_dpid == dpid:
-                        print "### dst_dpid=%s dpid=%s" % (dst_dpid, dpid)
+                        # print "### dst_dpid=%s dpid=%s" % (dst_dpid, dpid)
                         if not self.arp_reply[dst_dpid]:
                             dict_temp["src_mac"] = pkt_arp.src_mac
                             dict_temp["dst_mac"] = pkt_arp.dst_mac
