@@ -1,0 +1,9 @@
+dpid=0xba56efa86f44 src_mac=02:c1:aa:fa:2b:d6 out_port=1
+dpid=0xba56efa86f44 src_mac=02:13:9e:77:ed:31 out_port=2
+dpid=0xba56efa86f44 src_mac=02:18:4a:bf:d8:00 out_port=2
+dpid=0xaa6b9b1a6248 src_mac=02:13:9e:77:ed:31 out_port=3
+dpid=0xaa6b9b1a6248 src_mac=02:18:4a:bf:d8:00 out_port=1
+dpid=0x923d8a5ddd4c src_mac=02:c1:aa:fa:2b:d6 out_port=1
+dpid=0x923d8a5ddd4c src_mac=02:13:9e:77:ed:31 out_port=3
+dpid=0x923d8a5ddd4c src_mac=02:18:4a:bf:d8:00 out_port=2
+dpid=0x12b9228e0549 src_mac=02:18:4a:bf:d8:00 out_port=3

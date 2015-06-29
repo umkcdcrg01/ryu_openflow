@@ -394,6 +394,7 @@ class LLDPPacket(object):
 
     @staticmethod
     def lldp_parse(data):
+        
         pkt = packet.Packet(data)
         i = iter(pkt)
         eth_pkt = i.next()

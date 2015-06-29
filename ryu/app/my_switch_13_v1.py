@@ -18,7 +18,7 @@ from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3
 from ryu.lib.packet import packet
-from ryu.lib.packet import ethernet, arp, icmp, ipv4
+from ryu.lib.packet import ethernet
 from ryu.controller import dpset
 
 
@@ -96,21 +96,7 @@ class SimpleSwitch13(app_manager.RyuApp):
         dpid = datapath.id
         self.mac_to_port.setdefault(dpid, {})
 
-        pkt_arp = pkt.get_protocol(arp.arp)
-        pkt_icmp = pkt.get_protocol(icmp.icmp)
-
-        if pkt_arp:
-            print "ARP: %s" % pkt_arp.opcode
-            # self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
-            if pkt_arp.opcode == 1:
-                print "ARP Requst"
-                self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
-            elif pkt_arp.opcode == 2:
-                print "ARP Reply"
-                self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
-        if pkt_icmp:
-            print "\niCMP"
-            self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
+        self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
 
         # learn a mac address to avoid FLOOD next time.
         self.mac_to_port[dpid][src] = in_port
@@ -129,6 +115,7 @@ class SimpleSwitch13(app_manager.RyuApp):
             # flow_mod & packet_out
             if msg.buffer_id != ofproto.OFP_NO_BUFFER:
                 self.add_flow(datapath, 1, match, actions, msg.buffer_id)
+                return
             else:
                 self.add_flow(datapath, 1, match, actions)
         data = None
