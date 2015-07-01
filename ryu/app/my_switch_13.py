@@ -19,7 +19,7 @@ from ryu.controller.handler import CONFIG_DISPATCHER, \
 from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3
 from ryu.lib.packet import packet
-from ryu.lib.packet import ethernet, ipv4, icmp
+from ryu.lib.packet import ethernet, ipv4, icmp, arp
 from ryu.controller import dpset
 from ryu.lib.packet.lldp import LLDP_MAC_NEAREST_BRIDGE
 # from ryu.lib.packet.ether_types import ETH_TYPE_LLDP
@@ -175,6 +175,7 @@ class SimpleSwitch13(app_manager.RyuApp):
 
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocols(ethernet.ethernet)[0]
+        pkt_arp = pkt.get_protocol(arp.arp)
 
         dst = eth.dst
         src = eth.src
@@ -183,6 +184,11 @@ class SimpleSwitch13(app_manager.RyuApp):
         # do not forward LLCP packet in message
         if dst == LLDP_MAC_NEAREST_BRIDGE:
             return
+
+        if pkt_arp:
+            # flood all the ARP packages and save all the requests in self.arp_request and self.arp_reply
+            print "ARP: %s" % pkt_arp.opcode
+            self.logger.info("packet in %s %s %s %s", datapath.id, src, dst, in_port)
 
         dpid = hex(datapath.id)
         self.mac_to_port.setdefault(dpid, {})

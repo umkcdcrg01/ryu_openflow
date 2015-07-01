@@ -19,7 +19,6 @@
 
 # fix manuual arp will be in version v7
 
-# Failed Version, Dont run
 
 from ryu.base import app_manager
 from ryu.controller import ofp_event
@@ -45,7 +44,6 @@ import networkx as nx
 from ryu.topology import event, switches
 from ryu.topology.api import get_switch, get_link
 import pickle
-from ryu import utils
 
 # output ovs switch hostname and DPID pairs
 OFP_SWITCHES_LIST = \
@@ -67,8 +65,12 @@ OFP_ALL_PAIRS_SHOREST_PATH = './network-data/ofp_all_pairs_shortest_path.db'
 OFP_ALL_PATHS_SHOREST_PATH = './network-data/ofp_all_paths_shortest_path.db'
 OFP_MAC_TO_PORT = './network-data/ofp_mac_to_port.db'
 OFP_LINK_PORT = './network-data/ofp_link_port.db'
-OFP_HOST_SWITCHES_LIST = \
-    './network-data/ofp_host_switches_list.db'
+
+ETHERNET = ethernet.ethernet.__name__
+ETHERNET_MULTICAST = "ff:ff:ff:ff:ff:ff"
+ARP = arp.arp.__name__
+ICMP = icmp.icmp.__name__
+IPV4 = ipv4.ipv4.__name__
 
 
 class SimpleSwitch13(app_manager.RyuApp):
@@ -97,6 +99,7 @@ class SimpleSwitch13(app_manager.RyuApp):
         self.link_port = {}
         # save OVS datapath Object for later reference
         self.dpid_datapathObj = {}
+        self.arp_table={}
 
     # Given DPID, output hostname in string
     def _hostname_Check(self, datapath):
@@ -257,13 +260,23 @@ class SimpleSwitch13(app_manager.RyuApp):
             (p.protocol_name, p)for p in pkt.protocols if type(p) != str)
         # print "msg: ", ev.msg
         # print "header_list: ", header_list
-
-        if pkt_arp:
-            # flood all the ARP packages and save all the requests in self.arp_request and self.arp_reply
+        if ARP in header_list:
+            self.arp_table[header_list[ARP].src_ip] = src  # ARP learning
             print "ARP: %s" % pkt_arp.opcode
-            self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
-            self._handle_arp(datapath, in_port, pkt_ethernet, pkt_arp, msg)
+            print "arp_table:", self.arp_table
+            self._handle_arp(header_list, datapath, in_port, pkt_ethernet, pkt_arp, msg)
+            return 0
+
+        # if pkt_arp:
+        #     # flood all the ARP packages and save all the requests in self.arp_request and self.arp_reply
+        #     print "ARP: %s" % pkt_arp.opcode
+        #     self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
+        #     self._handle_arp(header_list, datapath, in_port, pkt_ethernet, pkt_arp, msg)
+        #     return 0
         if pkt_icmp and pkt_icmp.type == icmp.ICMP_ECHO_REQUEST:
+            print "icmp request"
+
+            return 0
             print "\nICMP From %d src_mac %s dst_mac %s" % (datapath.id, src, dst)
             shortest_path_list = (
                 self._handle_icmp(datapath, in_port, pkt_ethernet, pkt_ipv4, pkt_icmp))
@@ -294,10 +307,10 @@ class SimpleSwitch13(app_manager.RyuApp):
                     if msg.buffer_id == ofproto.OFP_NO_BUFFER:
                         data = msg.data
                     match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
-                    self.add_flow(next_datapath, 1, match, actions, msg.buffer_id)
+                    self.add_flow(next_datapath, 10, match, actions, msg.buffer_id)
                     reserse_match = parser.OFPMatch(in_port=out_port, eth_dst=src)
                     reserse_action = [parser.OFPActionOutput(in_port)]
-                    self.add_flow(next_datapath, 1, reserse_match, reserse_action, msg.buffer_id)
+                    self.add_flow(next_datapath, 10, reserse_match, reserse_action, msg.buffer_id)
 
                     print "in_port %s from dpid %s out_port %s To dpid %s" % (
                         in_port, self._hostname_Check(node),
@@ -313,11 +326,11 @@ class SimpleSwitch13(app_manager.RyuApp):
                         match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
                         print "in_port %s from dpid %s out_port %s To node %s" % (
                             in_port, self._hostname_Check(next_node), out_port, dst)
-                        self.add_flow(next_datapath, 1, match, actions, msg.buffer_id)
+                        self.add_flow(next_datapath, 10, match, actions, msg.buffer_id)
                         reserse_match = parser.OFPMatch(in_port=out_port, eth_dst=src)
                         reserse_action = [parser.OFPActionOutput(in_port)]
                         self.add_flow(
-                            next_datapath, 1, reserse_match, reserse_action, msg.buffer_id)
+                            next_datapath, 10, reserse_match, reserse_action, msg.buffer_id)
                         out = parser.OFPPacketOut(datapath=next_datapath, buffer_id=msg.buffer_id,
                                                   in_port=in_port, actions=actions, data=data)
                         datapath.send_msg(out)
@@ -330,67 +343,13 @@ class SimpleSwitch13(app_manager.RyuApp):
     ###################################################################
     # various  packet handler
     ####################################################################
-    def _handle_arp(self, datapath, port, pkt_ethernet, pkt_arp, msg):
+    def _handle_arp(self, header_list, datapath, in_port, pkt_ethernet, pkt_arp, msg):
         self.logger.info("_handle_arp:")
-        dpid = hex(datapath.id)
-        # self.logger.info("_handle_arp:")
-        # print "arp_code=%s datapath=%s in_port=%s src_mac=%s dst_mac=%s src_ip=%s dst_ip=%s" % (
-        #    pkt_arp.opcode, dpid, port, pkt_arp.src_mac, pkt_arp.dst_mac, pkt_arp.src_ip, pkt_arp.dst_ip)
-        if pkt_arp.opcode == 1:  # arp.ARP_REQUEST
-            # print "\narp_reply: ", self.arp_reply
-            self.arp_request[dpid]["src_mac"] = pkt_arp.src_mac
-            self.arp_request[dpid]["dst_mac"] = pkt_arp.dst_mac
-            self.arp_request[dpid]["src_ip"] = pkt_arp.src_ip
-            self.arp_request[dpid]["dst_ip"] = pkt_arp.dst_ip
-            # print "\narp_request: %s" % (self.arp_request)
-        elif pkt_arp.opcode == 2:
-            dict_temp = {}
-            for dst_dpid in self.arp_reply:
-                # print "\narp_reply: ", self.arp_reply
-                for dst_dpid in self.arp_reply:
-                    # print "dst_dpid=%s dpid=%s" % (dst_dpid, dpid)
-                    if dst_dpid == dpid:
-                        # print "### dst_dpid=%s dpid=%s" % (dst_dpid, dpid)
-                        if not self.arp_reply[dst_dpid]:
-                            dict_temp["src_mac"] = pkt_arp.src_mac
-                            dict_temp["dst_mac"] = pkt_arp.dst_mac
-                            dict_temp["src_ip"] = pkt_arp.src_ip
-                            dict_temp["dst_ip"] = pkt_arp.dst_ip
-                            dict_temp["count"] = 1
-                            # print "add new entry"
-                            self.arp_reply[dpid].append(dict_temp)
-                        else:
-                            for arp_reply_entry in self.arp_reply[dst_dpid]:
-                                if arp_reply_entry:
-                                    if (pkt_arp.src_mac == arp_reply_entry["src_mac"] and
-                                            pkt_arp.dst_mac == arp_reply_entry["dst_mac"] and
-                                            pkt_arp.src_ip == arp_reply_entry["src_ip"] and
-                                            pkt_arp.dst_ip == arp_reply_entry["dst_ip"]):
-                                        continue
-                                else:
-                                    dict_temp["src_mac"] = pkt_arp.src_mac
-                                    dict_temp["dst_mac"] = pkt_arp.dst_mac
-                                    dict_temp["src_ip"] = pkt_arp.src_ip
-                                    dict_temp["dst_ip"] = pkt_arp.dst_ip
-                                    dict_temp["count"] = 1
-                                    # print "add new entry"
-                                    self.arp_reply[dpid].append(dict_temp)
-                    elif dst_dpid != dpid:
-                        for arp_reply_entry in self.arp_reply[dst_dpid]:
-                            if arp_reply_entry:
-                                if (pkt_arp.src_mac == arp_reply_entry["src_mac"] and
-                                        pkt_arp.dst_mac == arp_reply_entry["dst_mac"] and
-                                        pkt_arp.src_ip == arp_reply_entry["src_ip"] and
-                                        pkt_arp.dst_ip == arp_reply_entry["dst_ip"]):
-                                    # print "existed arp reply dst_dpid:", dst_dpid
-                                    arp_reply_entry["count"] = 2
-
-        # flood out arp packet
+        # just flood all the arp packet
+        datapath = msg.datapath
+        ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
-        actions = [parser.OFPActionOutput(datapath.ofproto.OFPP_FLOOD)]
-        out = datapath.ofproto_parser.OFPPacketOut(datapath=datapath,
-                                                   buffer_id=0xffffffff, in_port=port, actions=actions, data=msg.data)
-        datapath.send_msg(out)
+
 
     def _handle_icmp(self, datapath, in_port, pkt_ethernet, pkt_ipv4, pkt_icmp):
         """
@@ -404,23 +363,14 @@ class SimpleSwitch13(app_manager.RyuApp):
             src_ip = pkt_ipv4.src
             dst_ip = pkt_ipv4.dst
             print "%s %s %s %s %s " % (src_dpid, src_mac, dst_mac, src_ip, dst_ip)
-            with open(OFP_HOST_SWITCHES_LIST, 'r') as inp:
-                for line in inp:
-                    print line
-                    if dst_ip == line.split()[0]:
-                        dst_dpid = line.split()[1]
-
             # print self.link_port
 
             # get the DPID which connected to dst_mac
-            # dst_dpid = self._return_destionation_dpid(src_dpid, self.arp_reply, src_mac, dst_mac)
-            # if dst_dpid == None:
-            #     print "no shortest"
-            #     time.sleep(10)
+            dst_dpid = self._return_destionation_dpid(src_dpid, self.arp_reply, src_mac, dst_mac)
             # print "src_dpid %s dst_dpid %s" % (src_dpid, dst_dpid)
 
             # find a shortest path for this icmp request
-            # print "%s %s %s %s" %(src_dpid, dst_dpid, type(src_dpid), type(dst_dpid))
+            print "%s %s %s %s" % (src_dpid, dst_dpid, type(src_dpid), type(dst_dpid))
             shortest_path_list = self._single_shortest_path(
                 int(src_dpid, 16), int(dst_dpid, 16))
             # print shortest_path_list
