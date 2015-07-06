@@ -70,6 +70,8 @@ OFP_LINK_PORT = './network-data/ofp_link_port.db'
 OFP_HOST_SWITCHES_LIST = \
     './network-data/ofp_host_switches_list.db'
 
+ICMP_PRIORITY = 3
+
 
 class SimpleSwitch13(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
@@ -260,8 +262,8 @@ class SimpleSwitch13(app_manager.RyuApp):
 
         if pkt_arp:
             # flood all the ARP packages and save all the requests in self.arp_request and self.arp_reply
-            print "ARP: %s" % pkt_arp.opcode
-            self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
+            # print "ARP: %s" % pkt_arp.opcode
+            # self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
             self._handle_arp(datapath, in_port, pkt_ethernet, pkt_arp, msg)
         if pkt_icmp and pkt_icmp.type == icmp.ICMP_ECHO_REQUEST:
             print "\nICMP From %d src_mac %s dst_mac %s" % (datapath.id, src, dst)
@@ -271,6 +273,8 @@ class SimpleSwitch13(app_manager.RyuApp):
             count = 0
             # origin_in_port = in_port
             if len(shortest_path_list) == 1:
+                # if hosts are belong to the same switch
+                # print "belong to same switch"  !!!!! need to be fixed
                 next_node = shortest_path_list[0]
                 next_datapath = self.dpid_datapathObj[next_node]
                 out_port = self.mac_to_port[hex(next_node)][dst]
@@ -279,13 +283,14 @@ class SimpleSwitch13(app_manager.RyuApp):
                 if msg.buffer_id == ofproto.OFP_NO_BUFFER:
                     data = msg.data
                 match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
-                self.add_flow(next_datapath, 1, match, actions, msg.buffer_id)
+                self.add_flow(next_datapath, ICMP_PRIORITY, match, actions, msg.buffer_id)
 
             else:
+                # more than one nodes in the shortest path list
                 for node in shortest_path_list:
                     next_datapath = self.dpid_datapathObj[node]
                     next_node = shortest_path_list[count + 1]
-                    print "---%s %s" % (node, next_datapath)
+                    print "working on node %s" % (node,)
                     out_port = self.link_port[node][next_node]
                     actions = [parser.OFPActionOutput(out_port)]
                     # print out_port
@@ -294,10 +299,12 @@ class SimpleSwitch13(app_manager.RyuApp):
                     if msg.buffer_id == ofproto.OFP_NO_BUFFER:
                         data = msg.data
                     match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
-                    self.add_flow(next_datapath, 1, match, actions, msg.buffer_id)
+                    print "install flow at node: %s" % (node,)
+                    self.add_flow(next_datapath, ICMP_PRIORITY, match, actions, msg.buffer_id)
                     reserse_match = parser.OFPMatch(in_port=out_port, eth_dst=src)
                     reserse_action = [parser.OFPActionOutput(in_port)]
-                    self.add_flow(next_datapath, 1, reserse_match, reserse_action, msg.buffer_id)
+                    print "install reverse flow at node: %s" % (next_datapath,)
+                    self.add_flow(next_datapath, ICMP_PRIORITY, reserse_match, reserse_action, msg.buffer_id)
 
                     print "in_port %s from dpid %s out_port %s To dpid %s" % (
                         in_port, self._hostname_Check(node),
@@ -305,19 +312,20 @@ class SimpleSwitch13(app_manager.RyuApp):
                     count += 1
                     in_port = self.link_port[next_node][node]
                     if count == len(shortest_path_list) - 1:
-                        next_datapath = self.dpid_datapathObj[next_node]
-                        out_port = self.mac_to_port[hex(node)][dst]
+                        last_node = shortest_path_list[-1]
+                        next_datapath = self.dpid_datapathObj[last_node]
+                        print "working on node %s and this is the last stop" % (last_node,)
+                        out_port = self.mac_to_port[hex(last_node)][dst]
                         actions = [parser.OFPActionOutput(out_port)]
-                        print "last stop %s" % out_port
-                        in_port = self.link_port[next_node][node]
+                        in_port = self.link_port[last_node][node]
                         match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
                         print "in_port %s from dpid %s out_port %s To node %s" % (
                             in_port, self._hostname_Check(next_node), out_port, dst)
-                        self.add_flow(next_datapath, 1, match, actions, msg.buffer_id)
+                        self.add_flow(next_datapath, ICMP_PRIORITY, match, actions, msg.buffer_id)
                         reserse_match = parser.OFPMatch(in_port=out_port, eth_dst=src)
                         reserse_action = [parser.OFPActionOutput(in_port)]
                         self.add_flow(
-                            next_datapath, 1, reserse_match, reserse_action, msg.buffer_id)
+                            next_datapath, ICMP_PRIORITY, reserse_match, reserse_action, msg.buffer_id)
                         out = parser.OFPPacketOut(datapath=next_datapath, buffer_id=msg.buffer_id,
                                                   in_port=in_port, actions=actions, data=data)
                         datapath.send_msg(out)
@@ -331,7 +339,7 @@ class SimpleSwitch13(app_manager.RyuApp):
     # various  packet handler
     ####################################################################
     def _handle_arp(self, datapath, port, pkt_ethernet, pkt_arp, msg):
-        self.logger.info("_handle_arp:")
+        # self.logger.info("_handle_arp:")
         dpid = hex(datapath.id)
         # self.logger.info("_handle_arp:")
         # print "arp_code=%s datapath=%s in_port=%s src_mac=%s dst_mac=%s src_ip=%s dst_ip=%s" % (
@@ -404,12 +412,21 @@ class SimpleSwitch13(app_manager.RyuApp):
             src_ip = pkt_ipv4.src
             dst_ip = pkt_ipv4.dst
             print "%s %s %s %s %s " % (src_dpid, src_mac, dst_mac, src_ip, dst_ip)
+            dst_dpid = None
             with open(OFP_HOST_SWITCHES_LIST, 'r') as inp:
                 for line in inp:
                     print line
                     if dst_ip == line.split()[0]:
                         dst_dpid = line.split()[1]
 
+            while dst_dpid == None:
+                print "retry"
+                time.sleep(10)
+                with open(OFP_HOST_SWITCHES_LIST, 'r') as inp:
+                    for line in inp:
+                        print line
+                        if dst_ip == line.split()[0]:
+                            dst_dpid = line.split()[1]
             # print self.link_port
 
             # get the DPID which connected to dst_mac
@@ -592,7 +609,7 @@ class SimpleSwitch13(app_manager.RyuApp):
         while True:
             for dp in self.datapaths.values():
                 self._mac_to_port()
-                self._request_stats(dp)
+                # self._request_stats(dp)
                 self._update_switch_dpid_list()
                 self._all_single_shortest_path()
                 self._all_paris_shortest_path()

@@ -62,10 +62,10 @@ class HostTracker(app_manager.RyuApp):
 
     def _update_host_switch_file(self):
         #if os.path.exists(OFP_HOST_SWITCHES_LIST):
-        print "**"*20
+        # print "**"*20
         with open(OFP_HOST_SWITCHES_LIST, 'w') as outp:
             for srcIP, val in self.hosts.items():
-                print srcIP, val['dpid']
+                # print srcIP, val['dpid']
                 outp.write("%s %s\n" % (srcIP, val['dpid']))
 
 
