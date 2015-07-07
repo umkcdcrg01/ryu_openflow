@@ -1,7 +1,6 @@
 from __future__ import division
 from operator import attrgetter
 from ryu.base import app_manager
-from ryu.app import simple_switch_13
 from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
 from ryu.controller.handler import CONFIG_DISPATCHER
@@ -21,7 +20,6 @@ OFP_SWITCHES_PORT_STATS_PREVIOUS = \
 
 
 class MySimpleMonitor(app_manager.RyuApp):
-
     def __init__(self, *args, **kwargs):
         super(MySimpleMonitor, self).__init__(*args, **kwargs)
         self.datapaths = {}
@@ -81,6 +79,8 @@ class MySimpleMonitor(app_manager.RyuApp):
             dist[key].pop(0)
 
     def _get_speed(self, now, pre, period):
+        if period == 0:
+            return
         return (now - pre) / period
 
     def _get_time(self, sec, nsec):
@@ -91,11 +91,11 @@ class MySimpleMonitor(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_handler(self, ev):
-        print "simple_monitor.flow_stats:"
+        # print "simple_monitor.flow_stats:"
         body = ev.msg.body
         switch_name = ev.msg.datapath.id
         with open(OFP_SWITCHES_FLOW_STATS.format(switch_name), 'w') as iff:
-            print "writing to %s" % (os.path.abspath(OFP_SWITCHES_FLOW_STATS.format(switch_name)))
+            # print "writing to %s" % (os.path.abspath(OFP_SWITCHES_FLOW_STATS.format(switch_name)))
             self.logger.debug("\n> Flow Stats:")
             self.logger.debug('datapath         '
                               'hostname         '
@@ -155,9 +155,9 @@ class MySimpleMonitor(app_manager.RyuApp):
                                   stat.duration_nsec, stat.match['eth_dst'],
                                   stat.instructions[0].actions[0].port,
                                   stat.packet_count, stat.byte_count)
-            print "\n%16d (%s  %s   %s )  [(%s  %s  %s  %s)]" % (ev.msg.datapath.id,
-                                                                 'in_port', 'eth_dst', 'actions.port', 'packet_count', 'byte_count',
-                                                                 'duration_sec', 'duration_nsec')
+            # print "\n%16d (%s  %s   %s )  [(%s  %s  %s  %s)]" % (ev.msg.datapath.id,
+            #                                                     'in_port', 'eth_dst', 'actions.port', 'packet_count', 'byte_count',
+            #                                                     'duration_sec', 'duration_nsec')
             # for key, val in self.flow_stats.items():
             #     print key, "        ", val
             # print "Flow speed"
@@ -166,7 +166,7 @@ class MySimpleMonitor(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPortStatsReply, MAIN_DISPATCHER)
     def _port_stats_reply_handler(self, ev):
-        print "simple_monitor.port_stats:"
+        # print "simple_monitor.port_stats:"
         body = ev.msg.body
         switch_name = ev.msg.datapath.id
         with open(OFP_SWITCHES_PORT_STATS.format(switch_name), 'w') as iff:
@@ -231,9 +231,9 @@ class MySimpleMonitor(app_manager.RyuApp):
                            stat.tx_packets, stat.tx_bytes, stat.tx_errors))
                 iff.write("\n")
 
-            print "\n(%16d  %s) [(%s  %s  %s  %s  %s)]" % (ev.msg.datapath.id,
-                                                           'stat_port_no', 'rx_packets',
-                                                           'rx_bytes', 'rx_errors', 'duration_sec', 'duration_nsec')
+            # print "\n(%16d  %s) [(%s  %s  %s  %s  %s)]" % (ev.msg.datapath.id,
+            #                                               'stat_port_no', 'rx_packets',
+            #                                               'rx_bytes', 'rx_errors', 'duration_sec', 'duration_nsec')
             # for key, val in self.port_stats.items():
             #     print key, "        ", val
             # print "port speed"

@@ -12,14 +12,11 @@
 # implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# V8.
-# control arp and icmp packet
-# need to mannual start arp from host: szb53@h2:~$
-
-# szb53@h4:~/ryu/ryu/app$ ryu-manager --observe-links my_switch_13_v8.py host_tracker.py my_monitor_v1.py my_arp_v2.py
+# szb53@h4:~/ryu/ryu/app$ ryu-manager --observe-links my_switch_13_v9.py my_monitor_v1.py my_arp_v2_copy.py
 # issue: Web http://192.1.242.160:8080 does not show any topology
 # debug: lots of app on the command line ??? maybe. 
-#       hope it will be fixed in V9
+#       hope it will be fixed in V9 ????????????????
+# host_tacker.py still can not be executed together
 
 from ryu.base import app_manager
 from ryu.controller import ofp_event
@@ -541,7 +538,7 @@ class SimpleSwitch13(app_manager.RyuApp):
             self.logger.info("Illeagal port state %s %s", port_no, reason)
 
 
-# This will turn on Web restAPI
+## This will turn on Web restAPI
 app_manager.require_app('ryu.app.rest_topology')
 app_manager.require_app('ryu.app.ws_topology')
 app_manager.require_app('ryu.app.ofctl_rest')
