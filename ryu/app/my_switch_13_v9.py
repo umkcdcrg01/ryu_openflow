@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # szb53@h4:~/ryu/ryu/app$ ryu-manager --observe-links my_switch_13_v9.py my_monitor_v1.py my_arp_v2_copy.py
+# szb53@h4:~/ryu/ryu/app$ ryu-manager --observe-links my_switch_13_v9.py my_monitor_v1.py my_arp_v2_r1.py
 # issue: Web http://192.1.242.160:8080 does not show any topology
-# debug: lots of app on the command line ??? maybe. 
+# debug: lots of app on the command line ??? maybe.
 #       hope it will be fixed in V9 ????????????????
 # host_tacker.py still can not be executed together
 
@@ -288,6 +289,7 @@ class SimpleSwitch13(app_manager.RyuApp):
                         last_node = shortest_path_list[-1]
                         next_datapath = self.dpid_datapathObj[last_node]
                         print "working on node %s and this is the last stop" % (last_node,)
+                        print self.mac_to_port
                         out_port = self.mac_to_port[hex(last_node)][dst]
                         actions = [parser.OFPActionOutput(out_port)]
                         in_port = self.link_port[last_node][node]
@@ -344,6 +346,7 @@ class SimpleSwitch13(app_manager.RyuApp):
             shortest_path_list = self._single_shortest_path(
                 int(src_dpid, 16), int(dst_dpid, 16))
             # print shortest_path_list
+            # self._all_paths_shortest_path()
             return shortest_path_list
 
     def _return_destionation_dpid(self, src_dpid, arp_reply, src_mac, dst_mac):
@@ -420,6 +423,7 @@ class SimpleSwitch13(app_manager.RyuApp):
     def _all_paths_shortest_path(self):
         # print all the shortest paths for each node pair
         # print "_all_paths_shortest_path ", self.net
+        # print "my_switch_13_v9: _all_paths_shortest_path:"
         with open(OFP_ALL_PATHS_SHOREST_PATH, 'w') as outp:
             for src in self.net.nodes():
                 for dst in self.net.nodes():
@@ -434,6 +438,9 @@ class SimpleSwitch13(app_manager.RyuApp):
                                                             self._hostname_Check(dst),
                                                             [self._hostname_Check(i) for i in each_path_list]))
                                 outp.write("\n")
+                                # print("%s -> %s %s" % (self._hostname_Check(src),
+                                #                        self._hostname_Check(dst),
+                                #                        [self._hostname_Check(i) for i in each_path_list]))
 
     ###################################################################
     # write mac_to_port in every 10s
@@ -538,7 +545,7 @@ class SimpleSwitch13(app_manager.RyuApp):
             self.logger.info("Illeagal port state %s %s", port_no, reason)
 
 
-## This will turn on Web restAPI
+# This will turn on Web restAPI
 app_manager.require_app('ryu.app.rest_topology')
 app_manager.require_app('ryu.app.ws_topology')
 app_manager.require_app('ryu.app.ofctl_rest')

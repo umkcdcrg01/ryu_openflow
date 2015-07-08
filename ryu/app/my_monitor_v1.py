@@ -20,6 +20,7 @@ OFP_SWITCHES_PORT_STATS_PREVIOUS = \
 
 
 class MySimpleMonitor(app_manager.RyuApp):
+
     def __init__(self, *args, **kwargs):
         super(MySimpleMonitor, self).__init__(*args, **kwargs)
         self.datapaths = {}
@@ -170,7 +171,7 @@ class MySimpleMonitor(app_manager.RyuApp):
         body = ev.msg.body
         switch_name = ev.msg.datapath.id
         with open(OFP_SWITCHES_PORT_STATS.format(switch_name), 'w') as iff:
-            print "writing to %s" % (os.path.abspath(OFP_SWITCHES_PORT_STATS.format(switch_name)))
+            # print "writing to %s" % (os.path.abspath(OFP_SWITCHES_PORT_STATS.format(switch_name)))
             self.logger.debug("\n> Port Stats:")
             self.logger.debug('datapath         '
                               'hostname       '

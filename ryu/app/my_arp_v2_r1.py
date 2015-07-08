@@ -17,10 +17,17 @@ from ryu.lib.packet.arp import arp
 from ryu.ofproto import ofproto_v1_3
 from ryu.ofproto import ether
 from ryu.ofproto import inet
+import time
+import os
 # config logging
 # LOG = logging.getLogger('SimpleArp')
 # LOG.setLevel(logging.DEBUG)
 # logging.basicConfig()
+
+OFP_SWITCHES_LIST_PREVIOUS = \
+    './network-data/ofp_switches_list_prev.db'
+OFP_SWITCHES_LIST_SCRIPT = \
+    './scripts/remote_ovs_operation/get_switch_ofpbr_datapath_id.sh'
 
 
 class MySimpleArp(app_manager.RyuApp):
@@ -29,10 +36,31 @@ class MySimpleArp(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(MySimpleArp, self).__init__(*args, **kwargs)
         self.mac_to_port = {}
+        self.arp_learning = {}  # self.arp_learning = {srcMAC:[dst_ip,in_port,time]}
+        self.packetToport = {}
+        self.hostname_list = {}
         self.dpset = kwargs['dpset']
 
     def _get_hwaddr(self, dpid, port_no):
         return self.dpset.get_port(dpid, port_no).hw_addr
+
+    def _hostname_Check(self, datapath):
+        # Given decimal datapath ID, return hostname
+        if os.path.exists(os.path.abspath(OFP_SWITCHES_LIST_PREVIOUS)):
+            f = os.path.abspath(OFP_SWITCHES_LIST_PREVIOUS)
+        else:
+            f = os.path.abspath(OFP_SWITCHES_LIST)
+        with open(f, 'r') as iff:
+            for line in iff:
+                hostname, dpid = line.split()
+                self.hostname_list[int(dpid, 16)] = hostname
+
+        # print self.hostname_list
+        # NEED add some datapath check later
+        if datapath not in self.hostname_list.keys():
+            return datapath
+        else:
+            return self.hostname_list[datapath]
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -86,16 +114,49 @@ class MySimpleArp(app_manager.RyuApp):
         packets = Packet(msg.data)
         dpid = datapath.id
         self.mac_to_port.setdefault(dpid, {})
+
         eth = packets.get_protocols(ethernet)[0]
         src = eth.src
+        dst = eth.dst
         self.mac_to_port[dpid][src] = inPort
         data = msg.data
 
+        self.arp_learning.setdefault(dpid, [])
+        self.packetToport.setdefault(dpid, {})
+
+        etherFrame = packets.get_protocol(ethernet)
+        # if dst == LLDP_MAC_NEAREST_BRIDGE:
+        #     return
         # print "packets: ", packets
         # print "packets.get_protocols(ethernet): ", packets.get_protocols(ethernet)
+
+        # print "etherFrame######", etherFrame
+        # etherFrame = packets.get_protocol(ethernet)
+        etherFrame = packets.get_protocol(ethernet)
+        # print etherFrame
+        # print ether
+        # print hex(etherFrame.ethertype)
+        # print hex(ether.ETH_TYPE_ARP)
         if etherFrame.ethertype == ether.ETH_TYPE_ARP:
+            arpPacket = packets.get_protocol(arp)
+            arpArriveTime = time.time()
+            srcMac = etherFrame.src
+            arp_dstIP = arpPacket.dst_ip
+            dst = eth.dst
+            if dst == "ff:ff:ff:ff:ff:ff":
+                self.packetToport[datapath.id][(srcMac, arp_dstIP, inPort)] = arpArriveTime
+            # print "arp"
             # print "packets: ", packets
             # print "packets.get_protocols(ethernet): ", packets.get_protocols(ethernet)
+            # print "ARP: %s" % arpPacket.opcode
+            # self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
+            # if arpPacket.opcode == 1:
+            #     print "ARP Requst"
+            #     self.logger.info("packet in %s %s %s %s", datapath.id, srcMac, dst, inPort)
+            # elif arpPacket.opcode == 2:
+            #     print "ARP Reply"
+            #     self.logger.info("packet in %s %s %s %s", datapath.id, srcMac, dst, inPort)
+
             self.receive_arp(datapath, packets, etherFrame, inPort, data)
             return 0
         else:
@@ -104,17 +165,52 @@ class MySimpleArp(app_manager.RyuApp):
 
     def receive_arp(self, datapath, packets, etherFrame, inPort, data):
         arpPacket = packets.get_protocol(arp)
+        arp_dstIP = arpPacket.dst_ip
+        arp_srcIP = arpPacket.src_ip
         if arpPacket.opcode == 1:
-            arp_dstIp = arpPacket.dst_ip
-            self.logger.debug("receive ARP request %s => %s (port%d)"
-                              % (etherFrame.src, etherFrame.dst, inPort))
-            self.reply_arp(datapath, etherFrame, arpPacket, arp_dstIp, inPort, data)
+            # self.logger.info("%s: receive ARP request %s => %s (port%d)"
+            #                  % (self._hostname_Check(datapath.id), etherFrame.src, etherFrame.dst, inPort))
+            if self.anti_arp_brodcast(datapath, etherFrame, inPort, arp_dstIP):
+                self.logger.info("%s: receive ARP request %s => %s (port%d) src_ip=%s dst_ip=%s"
+                                 % (self._hostname_Check(datapath.id), etherFrame.src, etherFrame.dst, inPort, arp_srcIP, arp_dstIP))
+                # print "-----packetToport: ", self.packetToport
+                # print "-----arp_learning: ", self.arp_learning
+                self.reply_arp(datapath, etherFrame, arpPacket, arp_dstIP, inPort, data)
         elif arpPacket.opcode == 2:
-            pass
+            self.reply_arp(datapath, etherFrame, arpPacket, arp_dstIP, inPort, data)
+
+    def anti_arp_brodcast(self, datapath, etherFrame, inPort, arp_dstIP):
+        if etherFrame.dst == "ff:ff:ff:ff:ff:ff":
+            if self.packetToport[datapath.id]:
+                if ((etherFrame.src, arp_dstIP, inPort) in self.packetToport[datapath.id].keys()):
+                    print "1"
+                    return False
+                else:
+                    print("Another muticast packet form %s at %i port in %s " % (
+                       etherFrame.src, inPort, self._hostname_Check(datapath.id)))
+                    print "packetToport: ", self.packetToport
+                    print "arp_learning: ", self.arp_learning
+                    self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)] = time.time()
+                    print "2"
+                    return True
+            # else:
+            #     # add to dictionary self.packetToport
+            #     arpArriveTime = time.time()
+            #     srcMac = etherFrame.src
+            #     self.packetToport[datapath.id] = [srcMac, arp_dstIP, inPort, arpArriveTime]
+            #     self.arp_learning[datapath.id] = [srcMac, inPort, arpArriveTime]
+            #     print "packetToport: ", self.packetToport
+            #     print "arp_learning: ", self.arp_learning
+            #     print "3"
+            #     return True
+        else:
+            print "4"
+            return True
 
     def reply_arp(self, datapath, etherFrame, arpPacket, arp_dstIp, inPort, data):
         """flood the arp """
-        dst = arp_dstIp
+        # print "flood"
+        dst = etherFrame.dst
         dpid = datapath.id
         if dst in self.mac_to_port[datapath.id]:
             out_port = self.mac_to_port[dpid][dst]
