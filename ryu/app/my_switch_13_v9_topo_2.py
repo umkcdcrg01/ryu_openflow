@@ -12,8 +12,8 @@
 # implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# szb53@h4:~/ryu/ryu/app$ ryu-manager --observe-links my_switch_13_v9.py my_monitor_v1.py my_arp_v2_copy.py
-# szb53@h4:~/ryu/ryu/app$ ryu-manager --observe-links my_switch_13_v9.py my_monitor_v1.py my_arp_v2_r1.py
+# szb53@h4:~/ryu/ryu/app$ ryu-manager my_switch_13_v9_topo_2.py\
+# host_tracker_topo_2.py my_monitor_v1_topo_2.py my_arp_v2_r1_topo_2.py
 # issue: Web http://192.1.242.160:8080 does not show any topology
 # debug: lots of app on the command line ??? maybe.
 #       hope it will be fixed in V9 ????????????????
@@ -48,26 +48,25 @@ from ryu import utils
 
 # output ovs switch hostname and DPID pairs
 OFP_SWITCHES_LIST = \
-    './network-data/ofp_switches_list.db'
+    './network-data2/ofp_switches_list.db'
 OFP_SWITCHES_LIST_PREVIOUS = \
-    './network-data/ofp_switches_list_prev.db'
+    './network-data2/ofp_switches_list_prev.db'
 OFP_SWITCHES_LIST_SCRIPT = \
-    './scripts/remote_ovs_operation_topo_1/get_switch_ofpbr_datapath_id.sh'
+    './scripts/remote_ovs_operation_topo_2/get_switch_ofpbr_datapath_id.sh'
 # OFP_SWITCHES_FLOW_STATS = \
-#     './network-data/ofp_switches_{0}_flow_stats.db'
+#     './network-data2/ofp_switches_{0}_flow_stats.db'
 # OFP_SWITCHES_FLOW_STATS_PREVIOUS = \
-#     './network-data/ofp_switches_{0}_flow_stats_prev.db'
+#     './network-data2/ofp_switches_{0}_flow_stats_prev.db'
 # OFP_SWITCHES_PORT_STATS = \
-#     './network-data/ofp_switches_{0}_port_stats.db'
+#     './network-data2/ofp_switches_{0}_port_stats.db'
 # OFP_SWITCHES_PORT_STATS_PREVIOUS = \
-#     './network-data/ofp_switches_{0}_port_stats_prev.db'
-OFP_SINGLE_SHOREST_PATH = './network-data/ofp_single_shortest_path.db'
-OFP_ALL_PAIRS_SHOREST_PATH = './network-data/ofp_all_pairs_shortest_path.db'
-OFP_ALL_PATHS_SHOREST_PATH = './network-data/ofp_all_paths_shortest_path.db'
-OFP_MAC_TO_PORT = './network-data/ofp_mac_to_port.db'
-OFP_LINK_PORT = './network-data/ofp_link_port.db'
-OFP_HOST_SWITCHES_LIST = \
-    './network-data/ofp_host_switches_list.db'
+#     './network-data2/ofp_switches_{0}_port_stats_prev.db'
+OFP_SINGLE_SHOREST_PATH = './network-data2/ofp_single_shortest_path.db'
+OFP_ALL_PAIRS_SHOREST_PATH = './network-data2/ofp_all_pairs_shortest_path.db'
+OFP_ALL_PATHS_SHOREST_PATH = './network-data2/ofp_all_paths_shortest_path.db'
+OFP_MAC_TO_PORT = './network-data2/ofp_mac_to_port.db'
+OFP_LINK_PORT = './network-data2/ofp_link_port.db'
+OFP_HOST_SWITCHES_LIST = './network-data2/ofp_host_switches_list.db'
 
 ICMP_PRIORITY = 3
 
@@ -155,16 +154,16 @@ class SimpleSwitch13(app_manager.RyuApp):
 
     ###################################################################
     # update switch dpid every 10s
-    # output to ./network-data/ofp_switches_list.db
+    # output to ./network-data2/ofp_switches_list.db
     ####################################################################
     def _update_switch_dpid_list(self):
-        # update and write to ./network-data/ofp_switches_list.db
+        # update and write to ./network-data2/ofp_switches_list.db
         # it will be called when switch in and out
         subprocess.call([OFP_SWITCHES_LIST_SCRIPT])
         shutil.copyfile(OFP_SWITCHES_LIST, OFP_SWITCHES_LIST_PREVIOUS)
 
     def _udpate_switch_port_stats(self):
-        # write to ./network-data/ofp-switch-port-stats.db
+        # write to ./network-data2/ofp-switch-port-stats.db
         pass
 
     ###################################################################
@@ -234,7 +233,7 @@ class SimpleSwitch13(app_manager.RyuApp):
         pkt_ipv4 = pkt.get_protocol(ipv4.ipv4)
         pkt_icmp = pkt.get_protocol(icmp.icmp)
 
-        # print "mac_to_port\n %s" % self.mac_to_port
+        print "mac_to_port\n %s" % self.mac_to_port
         header_list = dict(
             (p.protocol_name, p)for p in pkt.protocols if type(p) != str)
 
@@ -258,6 +257,9 @@ class SimpleSwitch13(app_manager.RyuApp):
                     data = msg.data
                 match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
                 self.add_flow(next_datapath, ICMP_PRIORITY, match, actions, msg.buffer_id)
+                out = parser.OFPPacketOut(datapath=next_datapath, buffer_id=msg.buffer_id,
+                                              in_port=in_port, actions=actions, data=data)
+                datapath.send_msg(out)
 
             else:
                 # more than one nodes in the shortest path list
@@ -330,7 +332,9 @@ class SimpleSwitch13(app_manager.RyuApp):
                 for line in inp:
                     print line
                     if dst_ip == line.split()[0]:
+                        print "find dst_ip from ofp_host_switches_list"
                         dst_dpid = line.split()[1]
+                        print "dst dpid is:", dst_dpid
 
             while dst_dpid == None:
                 print "retry"
@@ -349,24 +353,24 @@ class SimpleSwitch13(app_manager.RyuApp):
             # self._all_paths_shortest_path()
             return shortest_path_list
 
-    def _return_destionation_dpid(self, src_dpid, arp_reply, src_mac, dst_mac):
-        # return dst dpid based on arp_reply, src_mac, dst_mac
-        self.logger.info("_return_destionation_dpid:")
-        print "arp_reply:\n", self.arp_reply
-        print "arp_request:\n", self.arp_request
-        # print "arp_reply: %s" % self.arp_reply
-        for dst_dpid in self.arp_reply:
-            for arp_reply_entry in self.arp_reply[dst_dpid]:
-                if arp_reply_entry:
-                    print "src_mac=%s arp_reply_entry[dst_mac]=%s dst_mac=%s arp_reply_entry[src_mac]=%s" % (
-                        src_mac, arp_reply_entry["dst_mac"], dst_mac, arp_reply_entry["src_mac"])
-                    if(src_mac == arp_reply_entry["dst_mac"] and
-                            dst_mac == arp_reply_entry["src_mac"] and
-                            arp_reply_entry["count"] == 2):
-                        print "found match at dpid=%s" % dst_dpid
-                        return dst_dpid
-                    else:
-                        continue
+    # def _return_destionation_dpid(self, src_dpid, arp_reply, src_mac, dst_mac):
+    #     # return dst dpid based on arp_reply, src_mac, dst_mac
+    #     self.logger.info("_return_destionation_dpid:")
+    #     print "arp_reply:\n", self.arp_reply
+    #     print "arp_request:\n", self.arp_request
+    #     # print "arp_reply: %s" % self.arp_reply
+    #     for dst_dpid in self.arp_reply:
+    #         for arp_reply_entry in self.arp_reply[dst_dpid]:
+    #             if arp_reply_entry:
+    #                 print "src_mac=%s arp_reply_entry[dst_mac]=%s dst_mac=%s arp_reply_entry[src_mac]=%s" % (
+    #                     src_mac, arp_reply_entry["dst_mac"], dst_mac, arp_reply_entry["src_mac"])
+    #                 if(src_mac == arp_reply_entry["dst_mac"] and
+    #                         dst_mac == arp_reply_entry["src_mac"] and
+    #                         arp_reply_entry["count"] == 2):
+    #                     print "found match at dpid=%s" % dst_dpid
+    #                     return dst_dpid
+    #                 else:
+    #                     continue
     ###################################################################
     # output shortest path for all pairs for all switches (nodes) in every 10s
     ####################################################################
