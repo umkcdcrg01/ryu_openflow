@@ -5,7 +5,7 @@ OVS_BR=ofpbr
 # change to OFP_SWITCHES_LIST=`pwd`/../../network-data/ofp_switches_list.db
 # if you run this script in stand-alone mode
 #echo "./scripts/remote_ovs_operation_topo_2/get_switch_ofpbr_datapath_id.sh"
-OFP_SWITCHES_LIST=`pwd`/network-data2/ofp_switches_list.db
+OFP_SWITCHES_LIST="/users/szb53/ryu/ryu/app/network-data2/ofp_switches_list.db"
 #echo "writing to ${OFP_SWITCHES_LIST}"
 if [ '${OFP_SWITCHES_LIST}' ]; then
     # echo "File Exist"
@@ -28,5 +28,5 @@ for ovs in ${Switches} ; do
    DPID=`echo ${DPID} | awk '{print $1}'`
    #echo ${H} ${DPID}
    echo ${H} ${DPID} >> ${OFP_SWITCHES_LIST}
-   echo "Switch List updated "
+   # echo "Switch List updated "
 done

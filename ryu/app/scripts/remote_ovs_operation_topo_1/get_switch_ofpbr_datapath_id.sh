@@ -5,7 +5,7 @@ OVS_BR=ofpbr
 # change to OFP_SWITCHES_LIST=`pwd`/../../network-data/ofp_switches_list.db
 # if you run this script in stand-alone mode
 
-OFP_SWITCHES_LIST=`pwd`/network-data/ofp_switches_list.db
+OFP_SWITCHES_LIST=/users/szb53/ryu/ryu/app/network-data/ofp_switches_list.db
 
 if [ '${OFP_SWITCHES_LIST}' ]; then
 	# echo "File Exist"

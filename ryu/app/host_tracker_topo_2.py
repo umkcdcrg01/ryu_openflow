@@ -34,10 +34,13 @@ from ryu.lib import dpid as dpid_lib
 from ryu.lib.packet.lldp import LLDP_MAC_NEAREST_BRIDGE
 from ryu.lib import hub
 import os.path
+import shutil
 
 
 OFP_HOST_SWITCHES_LIST = \
     './network-data2/ofp_host_switches_list.db'
+OFP_HOST_SWITCHES_LIST_BACK = \
+    './network-data2/ofp_host_switches_list_backup.db'
 
 
 class HostTracker(app_manager.RyuApp):
@@ -55,18 +58,21 @@ class HostTracker(app_manager.RyuApp):
     def _update(self):
         # wait fof around 10s until all the swtiches connected to controller
         self._update_host_switch_file()
-        hub.sleep(2)
+        hub.sleep(5)
         while True:
             self._update_host_switch_file()
             hub.sleep(5)
 
     def _update_host_switch_file(self):
+        self.logger.info("HostTracker: _update_host_switch_file")
         #if os.path.exists(OFP_HOST_SWITCHES_LIST):
         # print "**"*20
         with open(OFP_HOST_SWITCHES_LIST, 'w') as outp:
             for srcIP, val in self.hosts.items():
-                # print srcIP, val['dpid']
-                outp.write("%s %s\n" % (srcIP, val['dpid']))
+                print srcIP, val['dpid'], val['port'], val['mac']
+                outp.write("%s %s %s %s\n" % (srcIP, val['dpid'], val['port'], val['mac']))
+        shutil.copyfile(OFP_HOST_SWITCHES_LIST, OFP_HOST_SWITCHES_LIST_BACK)
+        self.logger.debug("Updated ofp_host_switches_list_backup file")
 
 
 
@@ -142,8 +148,5 @@ class HostTracker(app_manager.RyuApp):
             # Always update MAC and switch-port location, just in case
             # DHCP reassigned the IP or the host moved
             self.hosts[srcIP]['mac'] = srcMac
+            # self.hosts[srcIP]['in_port'] = in_port
             self.updateHostTable(srcIP, dpid_lib.dpid_to_str(datapath.id), in_port)
-            # print "host:", self.hosts
-            # self._update_host_switch_file()
-                # self.count += 1
-                # print "router:", self.routers

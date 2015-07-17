@@ -19,6 +19,7 @@ from ryu.ofproto import ether
 from ryu.ofproto import inet
 import time
 import os
+from ryu.lib.packet.lldp import LLDP_MAC_NEAREST_BRIDGE
 # config logging
 # LOG = logging.getLogger('SimpleArp')
 # LOG.setLevel(logging.DEBUG)
@@ -26,8 +27,8 @@ import os
 
 OFP_SWITCHES_LIST_PREVIOUS = \
     './network-data2/ofp_switches_list_prev.db'
-OFP_SWITCHES_LIST_SCRIPT = \
-    './scripts/remote_ovs_operation/get_switch_ofpbr_datapath_id.sh'
+# OFP_SWITCHES_LIST_SCRIPT = \
+#     './scripts/remote_ovs_operation/get_switch_ofpbr_datapath_id.sh'
 
 
 class MySimpleArp(app_manager.RyuApp):
@@ -62,42 +63,42 @@ class MySimpleArp(app_manager.RyuApp):
         else:
             return self.hostname_list[datapath]
 
-    @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
-    def switch_features_handler(self, ev):
-        """ install table-miss flow entry """
-        self.logger.debug("my_arp: switch_features_handler:")
-        datapath = ev.msg.datapath
-        ofproto = datapath.ofproto
-        parser = datapath.ofproto_parser
+    # @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
+    # def switch_features_handler(self, ev):
+    #     """ install table-miss flow entry """
+    #     self.logger.debug("my_arp: switch_features_handler:")
+    #     datapath = ev.msg.datapath
+    #     ofproto = datapath.ofproto
+    #     parser = datapath.ofproto_parser
 
-        # self.logger.info("###################  datapath in decimal %s", datapath.id)
-        # self.logger.info("###################  datapath in hex %s", hex(int(datapath.id)))
-        #
-        # We specify NO BUFFER to max_len of the output action due to
-        # OVS bug. At this moment, if we specify a lesser number, e.g.,
-        # 128, OVS will send Packet-In with invalid buffer_id and
-        # truncated packet data. In that case, we cannot output packets
-        # correctly.  The bug has been fixed in OVS v2.1.0.
-        match = parser.OFPMatch()
-        actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER,
-                                          ofproto.OFPCML_NO_BUFFER)]
-        self.add_flow(datapath, 0, match, actions)
+    # self.logger.info("###################  datapath in decimal %s", datapath.id)
+    # self.logger.info("###################  datapath in hex %s", hex(int(datapath.id)))
+    #     #
+    # We specify NO BUFFER to max_len of the output action due to
+    # OVS bug. At this moment, if we specify a lesser number, e.g.,
+    # 128, OVS will send Packet-In with invalid buffer_id and
+    # truncated packet data. In that case, we cannot output packets
+    # correctly.  The bug has been fixed in OVS v2.1.0.
+    #     match = parser.OFPMatch()
+    #     actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER,
+    #                                       ofproto.OFPCML_NO_BUFFER)]
+    #     self.add_flow(datapath, 0, match, actions)
 
-    def add_flow(self, datapath, priority, match, actions, buffer_id=None):
-        self.logger.debug("my_arp:add_flow")
-        ofproto = datapath.ofproto
-        parser = datapath.ofproto_parser
+    # def add_flow(self, datapath, priority, match, actions, buffer_id=None):
+    #     self.logger.debug("my_arp:add_flow")
+    #     ofproto = datapath.ofproto
+    #     parser = datapath.ofproto_parser
 
-        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,
-                                             actions)]
-        if buffer_id:
-            mod = parser.OFPFlowMod(datapath=datapath, buffer_id=buffer_id,
-                                    priority=priority, match=match,
-                                    instructions=inst)
-        else:
-            mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
-                                    match=match, instructions=inst)
-        datapath.send_msg(mod)
+    #     inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,
+    #                                          actions)]
+    #     if buffer_id:
+    #         mod = parser.OFPFlowMod(datapath=datapath, buffer_id=buffer_id,
+    #                                 priority=priority, match=match,
+    #                                 instructions=inst)
+    #     else:
+    #         mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
+    #                                 match=match, instructions=inst)
+    #     datapath.send_msg(mod)
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def _packet_in_handler(self, ev):
@@ -113,16 +114,23 @@ class MySimpleArp(app_manager.RyuApp):
         inPort = msg.match['in_port']
         packets = Packet(msg.data)
         dpid = datapath.id
-        self.mac_to_port.setdefault(dpid, {})
 
         eth = packets.get_protocols(ethernet)[0]
         src = eth.src
         dst = eth.dst
-        self.mac_to_port[dpid][src] = inPort
-        data = msg.data
 
+        self.mac_to_port.setdefault(hex(dpid), {})
         self.arp_learning.setdefault(dpid, [])
         self.packetToport.setdefault(dpid, {})
+
+        if dst == LLDP_MAC_NEAREST_BRIDGE:
+            return
+
+        if src in self.mac_to_port[hex(dpid)].keys():
+            pass
+        else:
+            self.mac_to_port[hex(dpid)][src] = inPort
+        data = msg.data
 
         etherFrame = packets.get_protocol(ethernet)
         # if dst == LLDP_MAC_NEAREST_BRIDGE:
@@ -138,13 +146,16 @@ class MySimpleArp(app_manager.RyuApp):
         # print hex(etherFrame.ethertype)
         # print hex(ether.ETH_TYPE_ARP)
         if etherFrame.ethertype == ether.ETH_TYPE_ARP:
+            self.logger.debug("\n:")
             arpPacket = packets.get_protocol(arp)
             arpArriveTime = time.time()
             srcMac = etherFrame.src
             arp_dstIP = arpPacket.dst_ip
             dst = eth.dst
-            if dst == "ff:ff:ff:ff:ff:ff":
-                self.packetToport[datapath.id][(srcMac, arp_dstIP, inPort)] = arpArriveTime
+            # print "ARP"
+            # if dst == "ff:ff:ff:ff:ff:ff":
+            #     self.packetToport[datapath.id][(srcMac, arp_dstIP, inPort)] = arpArriveTime
+
             # print "arp"
             # print "packets: ", packets
             # print "packets.get_protocols(ethernet): ", packets.get_protocols(ethernet)
@@ -152,10 +163,10 @@ class MySimpleArp(app_manager.RyuApp):
             # self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
             # if arpPacket.opcode == 1:
             #     print "ARP Requst"
-            #     self.logger.info("packet in %s %s %s %s", datapath.id, srcMac, dst, inPort)
+            #     self.logger.info("packet in %s %s %s %s", self._hostname_Check(datapath.id).capitalize(), srcMac, dst, inPort)
             # elif arpPacket.opcode == 2:
             #     print "ARP Reply"
-            #     self.logger.info("packet in %s %s %s %s", datapath.id, srcMac, dst, inPort)
+            #     self.logger.info("packet in %s %s %s %s", self._hostname_Check(datapath.id).capitalize(), srcMac, dst, inPort)
 
             self.receive_arp(datapath, packets, etherFrame, inPort, data)
             return 0
@@ -164,58 +175,74 @@ class MySimpleArp(app_manager.RyuApp):
             return 1
 
     def receive_arp(self, datapath, packets, etherFrame, inPort, data):
+        self.logger.info("MySimpleArp: receive_arp: ")
         arpPacket = packets.get_protocol(arp)
         arp_dstIP = arpPacket.dst_ip
         arp_srcIP = arpPacket.src_ip
+        # self.logger.info("packet in %s %s %s %s", self._hostname_Check(datapath.id), etherFrame.src, etherFrame.dst, inPort)
+        self.logger.info("%s: receive ARP PACKET %s => %s (in_port=%d) From %s to %s"
+                         % (self._hostname_Check(datapath.id).capitalize(),
+                            etherFrame.src, etherFrame.dst, inPort, arp_srcIP, arp_dstIP))
         if arpPacket.opcode == 1:
-            # self.logger.info("%s: receive ARP request %s => %s (port%d)"
-            #                  % (self._hostname_Check(datapath.id), etherFrame.src, etherFrame.dst, inPort))
+            print "ARP Requst: Test if it is repeated Broadcasting"
             if self.anti_arp_brodcast(datapath, etherFrame, inPort, arp_dstIP):
-                self.logger.info("%s: receive ARP request %s => %s (port%d) src_ip=%s dst_ip=%s"
-                                 % (self._hostname_Check(datapath.id), etherFrame.src, etherFrame.dst, inPort, arp_srcIP, arp_dstIP))
+                # self.logger.info("%s: receive new ARP request %s => %s (port%d) src_ip=%s dst_ip=%s"
+                #                  % (self._hostname_Check(datapath.id), etherFrame.src, etherFrame.dst, inPort, arp_srcIP, arp_dstIP))
                 # print "-----packetToport: ", self.packetToport
                 # print "-----arp_learning: ", self.arp_learning
                 self.reply_arp(datapath, etherFrame, arpPacket, arp_dstIP, inPort, data)
         elif arpPacket.opcode == 2:
+            self.logger.info("ARP_reply: then Forwarding this ARP reply packet !!!!!!!!!!!!!!")
+            self.logger.info("packet in %s %s %s %s", self._hostname_Check(
+                datapath.id).capitalize(), etherFrame.src, etherFrame.dst, inPort)
             self.reply_arp(datapath, etherFrame, arpPacket, arp_dstIP, inPort, data)
 
     def anti_arp_brodcast(self, datapath, etherFrame, inPort, arp_dstIP):
+        test = False
+        self.logger.info("MySimpleArp: anti_arp_brodcast:")
         if etherFrame.dst == "ff:ff:ff:ff:ff:ff":
-            if self.packetToport[datapath.id]:
-                if ((etherFrame.src, arp_dstIP, inPort) in self.packetToport[datapath.id].keys()):
-                    print "1"
-                    return False
-                else:
-                    print("Another muticast packet form %s at %i port in %s " % (
-                       etherFrame.src, inPort, self._hostname_Check(datapath.id)))
-                    print "packetToport: ", self.packetToport
-                    print "arp_learning: ", self.arp_learning
-                    self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)] = time.time()
-                    print "2"
-                    return True
-            # else:
-            #     # add to dictionary self.packetToport
-            #     arpArriveTime = time.time()
-            #     srcMac = etherFrame.src
-            #     self.packetToport[datapath.id] = [srcMac, arp_dstIP, inPort, arpArriveTime]
-            #     self.arp_learning[datapath.id] = [srcMac, inPort, arpArriveTime]
-            #     print "packetToport: ", self.packetToport
-            #     print "arp_learning: ", self.arp_learning
-            #     print "3"
-            #     return True
-        else:
-            print "4"
-            return True
+            # self.logger.info("self.packetToport:", self.packetToport)
+            # self.logger.info(self.packetToport[datapath.id].keys())
+            # self.logger.info(self.packetToport[datapath.id])
+            if not self.packetToport[datapath.id]:
+                # self.logger.info("Another muticast packet form %s at %i port in %s " % (
+                #     etherFrame.src, inPort, self._hostname_Check(datapath.id)))
+                # self.logger.info("packetToport: ", self.packetToport)
+                # self.logger.info("arp_learning: ", self.arp_learning
+                self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)] = time.time()
+                self.logger.info("1   Added to self.packetToport and Forwarding ARP Broadcasting")
+                test = True
+            elif ((etherFrame.src, arp_dstIP, inPort) in self.packetToport[datapath.id].keys()):
+                self.logger.info("2   ARP BLOCKING, No Further transfer")
+                # self.logger.info("Another muticast packet form %s at %i port in %s " % (
+                #     etherFrame.src, inPort, self._hostname_Check(datapath.id)))
+                # self.logger.info("{DPID: { (src_mac, dst_ip, in_port): arpArriveTime, ():time }")
+                self.logger.info(self.packetToport[datapath.id].keys())
+                test = False
+            else:
+                # same ARP broadcast but from inport number is diffeernt from original port nubmer, block
+                for keys in self.packetToport[datapath.id].keys():
+                    if ((etherFrame.src, arp_dstIP) == keys[0:2]) and (inPort != keys[2]):
+                        self.logger.info("4 not Forwarding ARP Broadcasting")
+                # print("packet form %s at %i port in %s " % (etherFrame.src, inPort, self._hostname_Check(datapath.id)))
+                self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)] = time.time()
+                test = False
+        return test
 
     def reply_arp(self, datapath, etherFrame, arpPacket, arp_dstIp, inPort, data):
-        """flood the arp """
-        # print "flood"
+        # self.logger.info("flood")
+        self.logger.info("MySimpleArp: self.mac_to_port")
+        for key, value in self.mac_to_port.items():
+            print self._hostname_Check(int(str(key), 16)), value
+
         dst = etherFrame.dst
-        dpid = datapath.id
-        if dst in self.mac_to_port[datapath.id]:
+        dpid = hex(datapath.id)
+        if dst in self.mac_to_port[dpid]:
             out_port = self.mac_to_port[dpid][dst]
+            self.logger.info("MySimpleArp: reply_arp: Reply To Port %s !!!!!!!!!!!!!!!!!" % out_port)
         else:
             out_port = datapath.ofproto.OFPP_FLOOD
+            self.logger.info("MySimpleArp: reply_arp: Flooding...")
 
         actions = [datapath.ofproto_parser.OFPActionOutput(out_port)]
         out = datapath.ofproto_parser.OFPPacketOut(datapath=datapath, buffer_id=0xffffffff,
