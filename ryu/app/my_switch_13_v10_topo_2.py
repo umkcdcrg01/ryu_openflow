@@ -106,6 +106,7 @@ class SimpleSwitch13(app_manager.RyuApp):
     # Given DPID, output hostname in string
     def _hostname_Check(self, datapath):
         # Given decimal datapath ID, return hostname
+        # datapath should be in integer format
         if os.path.exists(os.path.abspath(OFP_SWITCHES_LIST_PREVIOUS)):
             f = os.path.abspath(OFP_SWITCHES_LIST_PREVIOUS)
         else:
@@ -255,32 +256,33 @@ class SimpleSwitch13(app_manager.RyuApp):
             shortest_path_list = (
                 self._handle_icmp(datapath, in_port, pkt_ethernet, pkt_ipv4, pkt_icmp))
             if shortest_path_list == None:
-                print "Could not find Destination IP. Exit Now"
+                print "\tCould not find Destination IP. Exit Now"
                 return
             else:
-                print "found shortest Path list", shortest_path_list
+                #print "\tfound shortest Path list", shortest_path_list
+                print "\tfound shortest Path list", [self._hostname_Check(path) for path in shortest_path_list]
 
             self.logger.info("Starts to installation flows")
             count = 0
             # origin_in_port = in_port
             if len(shortest_path_list) == 1:
                 # if hosts are belong to the same switch
-                print "belong to same switch"
+                print "\tbelong to same switch"
                 next_node = shortest_path_list[0]
                 next_datapath = self.dpid_datapathObj[next_node]
-                self.logger.info("next_node: %s" % next_node)
+                self.logger.info("\tnext_node: %s" % next_node)
                 # self.logger.info("next_datapath Obj %d" % next_datapath)
-                self.logger.info("next_datapath %s" % next_datapath.id)
+                self.logger.info("\tnext_datapath %s" % next_datapath.id)
                 # out_port = self.mac_to_port[hex(next_node)][dst]
                 output_port = int(self._get_output_port(next_datapath.id, dst))
                 if output_port == None:
-                    self.logger.info("Could not find output_port at %s" % self._hostname_Check(next_datapath.id))
+                    self.logger.info("\tCould not find output_port at %s" % self._hostname_Check(next_datapath.id))
                     return
                 actions = [parser.OFPActionOutput(output_port)]
                 data = None
                 if msg.buffer_id == ofproto.OFP_NO_BUFFER:
                     data = msg.data
-                print "in_port:", in_port, type(in_port), " output_port: ", output_port, type(output_port)
+                print "\t", "in_port:", in_port, type(in_port), " output_port: ", output_port, type(output_port)
                 try:
                     match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
                     reserse_match = parser.OFPMatch(in_port=output_port, eth_dst=src)
@@ -298,16 +300,16 @@ class SimpleSwitch13(app_manager.RyuApp):
                     datapath.send_msg(out)
                     return
                 except Exception as e:
-                    print "Installing flow errors:", e
+                    print "\tInstalling flow errors:", e
                     print(traceback.format_exc())
 
             else:
                 # more than one nodes in the shortest path list
-                print "Go through each node to install flows"
+                print "\t Go through each node to install flows"
                 for node in shortest_path_list:
                     next_datapath = self.dpid_datapathObj[node]
                     next_node = shortest_path_list[count + 1]
-                    print "working on node %s" % (node,)
+                    print "\t working on node %s" % (node,)
                     output_port = self.link_port[node][next_node]
                     actions = [parser.OFPActionOutput(output_port)]
                     # print output_port
@@ -316,14 +318,14 @@ class SimpleSwitch13(app_manager.RyuApp):
                     if msg.buffer_id == ofproto.OFP_NO_BUFFER:
                         data = msg.data
                     match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
-                    print "install flow at node: %s" % (node,)
+                    print "\tinstall flow at node: %s" % (node,)
                     self.add_flow(next_datapath, ICMP_PRIORITY, match, actions, msg.buffer_id)
                     reserse_match = parser.OFPMatch(in_port=output_port, eth_dst=src)
                     reserse_action = [parser.OFPActionOutput(in_port)]
-                    print "install reverse flow at node: %s" % (next_datapath,)
+                    print "\tinstall reverse flow at node: %s" % (next_datapath,)
                     self.add_flow(next_datapath, ICMP_PRIORITY, reserse_match, reserse_action, msg.buffer_id)
 
-                    print "in_port %s from dpid %s output_port %s To dpid %s" % (
+                    print "\t", "in_port %s from dpid %s output_port %s To dpid %s" % (
                         in_port, self._hostname_Check(node),
                         output_port, self._hostname_Check(next_node))
                     count += 1
@@ -331,19 +333,20 @@ class SimpleSwitch13(app_manager.RyuApp):
                     if count == len(shortest_path_list) - 1:
                         last_node = shortest_path_list[-1]
                         next_datapath = self.dpid_datapathObj[last_node]
-                        print "working on node %s and this is the last stop" % (last_node,)
+                        print "\t working on node %s and this is the last stop" % (last_node,)
                         # print self.mac_to_port
                         # output_port = self.mac_to_port[hex(last_node)][dst]
                         # output_port = int(self._get_output_port(last_node, dst))
                         actions = [parser.OFPActionOutput(output_port)]
                         in_port = self.link_port[last_node][node]
                         # new added line for testing
-                        for key in self.mac_to_port.keys():
-                            if last_node == int(str(key), 16):
-                                output_port = self.mac_to_port[key][dst]
-                        # output_port = int(self._get_output_port(next_datapath.id, dst))
+                        # for key in self.mac_to_port.keys():
+                        #     if last_node == int(str(key), 16):
+                        #         print int(str(key), 16)
+                        #         output_port = self.mac_to_port[key][dst]
+                        output_port = int(self._get_output_port(next_datapath.id, dst))
                         match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
-                        print "in_port %s from dpid %s output_port %s To node %s" % (
+                        print "\t", "in_port %s from dpid %s output_port %s To node %s" % (
                             in_port, self._hostname_Check(next_node), output_port, dst)
                         self.add_flow(next_datapath, ICMP_PRIORITY, match, actions, msg.buffer_id)
                         reserse_match = parser.OFPMatch(in_port=output_port, eth_dst=src)
@@ -369,17 +372,20 @@ class SimpleSwitch13(app_manager.RyuApp):
         so number format need to be transferred
         """
         self.logger.info("MySwitch: _get_output_port:")
-        with open(OFP_HOST_SWITCHES_LIST, 'r') as inp:
-            for line in inp:
-                target_dpid, target_dst_mac = line.split()[1], line.split()[3]
-                if int(str(target_dpid), 16) == dpid and target_dst_mac == dst_mac:
-                    output_port = line.split()[2]
-                    self.logger.info("Find output_port %s at %s" % (output_port, self._hostname_Check(dpid)))
-                    break
-                else:
-                    output_port = None
-        return output_port
-
+        try:
+            with open(OFP_HOST_SWITCHES_LIST, 'r') as inp:
+                for line in inp:
+                    target_dpid, target_dst_mac = line.split()[1], line.split()[3]
+                    if int(str(target_dpid), 16) == dpid and target_dst_mac == dst_mac:
+                        output_port = line.split()[2]
+                        self.logger.info("\t Find output_port %s at %s" % (output_port, self._hostname_Check(dpid)))
+                        break
+                    else:
+                        output_port = None
+        except Exception as e:
+            print "\t Find Destination output_port Error", e
+        finally:
+            return output_port
 
     ###################################################################
     # ICMP  packet handler, return shortest path list
@@ -398,20 +404,20 @@ class SimpleSwitch13(app_manager.RyuApp):
             print "%s %s %s %s %s " % (self._hostname_Check(datapath.id).capitalize(), src_mac, dst_mac, src_ip, dst_ip)
             dst_dpid = None
             # with open(OFP_HOST_SWITCHES_LIST, 'r') as inp:
-            self.logger.info("Open ofp_host_switches_list_backup.db file, seaching dst_ip: %s" % dst_ip)
+            self.logger.info("\t Open ofp_host_switches_list_backup.db file, seaching dst_ip: %s" % dst_ip)
             with open(OFP_HOST_SWITCHES_LIST_BACK, 'r') as inp:
                 for line in inp:
                     # print line
                     if dst_ip == line.split()[0]:
                         # print "find dst_ip from ofp_host_switches_list"
                         dst_dpid = line.split()[1]
-                        print "dst dpid is:", self._hostname_Check(dst_dpid)
+                        print "\t dst dpid is:", self._hostname_Check(dst_dpid)
             # only continue search for three times then give up
             count = 1
             while dst_dpid == None:
-                self.logger.info("No Luck for the %d time, keep searching..." % count)
+                self.logger.info("\t No Luck for the %d time, keep searching..." % count)
                 if count <= 3:
-                    print "retry"
+                    print "\t retry"
                     time.sleep(5)
                     count += 1
                     with open(OFP_HOST_SWITCHES_LIST_BACK, 'r') as inp:
@@ -419,9 +425,9 @@ class SimpleSwitch13(app_manager.RyuApp):
                             print line
                             if dst_ip == line.split()[0]:
                                 dst_dpid = line.split()[1]
-                                print "dst dpid is:", self._hostname_Check(dst_dpid)
+                                print "\t dst dpid is:", self._hostname_Check(dst_dpid)
                 else:
-                    print "GVING UP"
+                    print "\t GVING UP"
                     return None
 
             # find a shortest path for this icmp request
@@ -442,7 +448,7 @@ class SimpleSwitch13(app_manager.RyuApp):
         try:
             shortest_path = nx.shortest_path(self.net, src_dpid, dst_dpid)
         except Exception as e:
-            self.logger.info("_single_shortest_path %s", e)
+            self.logger.info("\t _single_shortest_path %s", e)
         finally:
             return [i for i in shortest_path]
 
@@ -457,7 +463,7 @@ class SimpleSwitch13(app_manager.RyuApp):
                         try:
                             shortest_path = nx.shortest_path(self.net, src, dst)
                         except Exception as e:
-                            self.logger.info("_single_shortest_path %s", e)
+                            self.logger.info("\t _single_shortest_path %s", e)
                         finally:
                             outp.write("%s -> %s %s" % (self._hostname_Check(src),
                                                         self._hostname_Check(dst),
@@ -511,11 +517,11 @@ class SimpleSwitch13(app_manager.RyuApp):
     # write mac_to_port in every 10s
     ####################################################################
     def _mac_to_port(self):
-        # print "_mac_to_port updating"
+        self.logger.info("MySwitch: _mac_to_port updating")
         # print "mac_to_port: OVS_name(dpid): {src_mac: in_port}"
-        self.logger.info("MySwitch: mac_to_port Update every 10s   mac_to_port: OVS_name(dpid): {src_mac: in_port}")
+        self.logger.debug("MySwitch: mac_to_port Update every 10s   mac_to_port: OVS_name(dpid): {src_mac: in_port}")
         for key, value in self.mac_to_port.items():
-            print self._hostname_Check(int(key, 16)), key, value
+            self.logger.info("\t %s %s %s " % (self._hostname_Check(int(key, 16)), key, value))
 
         with open(OFP_MAC_TO_PORT, 'w') as outp:
             # outp.write("hello")
