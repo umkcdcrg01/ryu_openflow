@@ -146,5 +146,6 @@ class HostTracker(app_manager.RyuApp):
             # Always update MAC and switch-port location, just in case
             # DHCP reassigned the IP or the host moved
             self.hosts[srcIP]['mac'] = srcMac
-            # self.hosts[srcIP]['in_port'] = in_port
-            self.updateHostTable(srcIP, dpid_lib.dpid_to_str(datapath.id), in_port)
+            if 'port' not in self.hosts[srcIP].keys():
+                # only update port number for the first time
+                self.updateHostTable(srcIP, dpid_lib.dpid_to_str(datapath.id), in_port)

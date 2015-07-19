@@ -163,10 +163,10 @@ class MySimpleArp(app_manager.RyuApp):
             # self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
             # if arpPacket.opcode == 1:
             #     print "ARP Requst"
-            #     self.logger.info("packet in %s %s %s %s", self._hostname_Check(datapath.id).capitalize(), srcMac, dst, inPort)
+            #     self.logger.info("packet in %s %s %s %s", self._hostname_Check(datapath.id), srcMac, dst, inPort)
             # elif arpPacket.opcode == 2:
             #     print "ARP Reply"
-            #     self.logger.info("packet in %s %s %s %s", self._hostname_Check(datapath.id).capitalize(), srcMac, dst, inPort)
+            #     self.logger.info("packet in %s %s %s %s", self._hostname_Check(datapath.id), srcMac, dst, inPort)
 
             self.receive_arp(datapath, packets, etherFrame, inPort, data)
             return 0
@@ -181,7 +181,7 @@ class MySimpleArp(app_manager.RyuApp):
         arp_srcIP = arpPacket.src_ip
         # self.logger.info("packet in %s %s %s %s", self._hostname_Check(datapath.id), etherFrame.src, etherFrame.dst, inPort)
         self.logger.info("\t %s: receive ARP PACKET %s => %s (in_port=%d) From %s to %s"
-                         % (self._hostname_Check(datapath.id).capitalize(),
+                         % (self._hostname_Check(datapath.id),
                             etherFrame.src, etherFrame.dst, inPort, arp_srcIP, arp_dstIP))
         if arpPacket.opcode == 1:
             print "\t ARP Requst: Test if it is repeated Broadcasting"
@@ -197,7 +197,7 @@ class MySimpleArp(app_manager.RyuApp):
         elif arpPacket.opcode == 2:
             self.logger.info("\t ARP_reply: then Forwarding this ARP reply packet !!!!!!!!!!!!!!")
             self.logger.info("\t packet in %s %s %s %s", self._hostname_Check(
-                datapath.id).capitalize(), etherFrame.src, etherFrame.dst, inPort)
+                datapath.id), etherFrame.src, etherFrame.dst, inPort)
             self.reply_arp(datapath, etherFrame, arpPacket, arp_dstIP, inPort, data)
 
     def anti_arp_brodcast(self, datapath, etherFrame, inPort, arp_dstIP):
@@ -252,7 +252,7 @@ class MySimpleArp(app_manager.RyuApp):
             self.logger.info("\t reply_arp: Reply To Port %s !!!!!!!!!!!!!!!!!" % out_port)
         else:
             out_port = datapath.ofproto.OFPP_FLOOD
-            self.logger.info("\t: reply_arp: Flooding...")
+            self.logger.info("\t reply_arp: Flooding...")
 
         actions = [datapath.ofproto_parser.OFPActionOutput(out_port)]
         out = datapath.ofproto_parser.OFPPacketOut(datapath=datapath, buffer_id=0xffffffff,

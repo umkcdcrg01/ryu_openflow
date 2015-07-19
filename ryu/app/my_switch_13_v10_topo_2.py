@@ -401,7 +401,7 @@ class SimpleSwitch13(app_manager.RyuApp):
             dst_mac = pkt_ethernet.dst
             src_ip = pkt_ipv4.src
             dst_ip = pkt_ipv4.dst
-            print "%s %s %s %s %s " % (self._hostname_Check(datapath.id).capitalize(), src_mac, dst_mac, src_ip, dst_ip)
+            print "%s %s %s %s %s " % (self._hostname_Check(datapath.id), src_mac, dst_mac, src_ip, dst_ip)
             dst_dpid = None
             # with open(OFP_HOST_SWITCHES_LIST, 'r') as inp:
             self.logger.info("\t Open ofp_host_switches_list_backup.db file, seaching dst_ip: %s" % dst_ip)
@@ -416,9 +416,9 @@ class SimpleSwitch13(app_manager.RyuApp):
             count = 1
             while dst_dpid == None:
                 self.logger.info("\t No Luck for the %d time, keep searching..." % count)
-                if count <= 3:
+                if count <= 20:
                     print "\t retry"
-                    time.sleep(5)
+                    time.sleep(2)
                     count += 1
                     with open(OFP_HOST_SWITCHES_LIST_BACK, 'r') as inp:
                         for line in inp:
