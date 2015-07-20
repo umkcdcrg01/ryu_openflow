@@ -12,13 +12,13 @@
 # implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
+# Simple switch V11 for topology 2
+# Jack Zhao
+# s.zhao.j@gmail.com# 
+# szb53@h4:~/ryu/ryu/app$ ryu-manager --observe-links my_switch_v11_topo_2.py host_tracker_topo_2.py my_arp_v3_topo_2.py my_monitor_v3_topo_2.py
 # How to run:
-# szb53@h4:~/ryu/ryu/app$ ryu-manager --observe-links my_switch_13_v10_topo_2.py host_tracker_topo_2.py my_arp_v2_r1_topo_2.py
 # issue: Web http://192.1.242.160:8080 does not show any topology
-# debug: lots of app on the command line ??? maybe.
-#       hope it will be fixed in V9 ????????????????
-# host_tacker.py still can not be executed together
+# debug: 
 
 from ryu.base import app_manager
 from ryu.controller import ofp_event
@@ -41,8 +41,8 @@ import os
 import subprocess
 import time
 import networkx as nx
-from ryu.topology import event, switches
 from ryu.topology.api import get_switch, get_link
+from ryu.topology import event, switches
 import pickle
 from ryu import utils
 import traceback
@@ -263,6 +263,7 @@ class SimpleSwitch13(app_manager.RyuApp):
                 print "\tfound shortest Path list", [self._hostname_Check(path) for path in shortest_path_list]
 
             self.logger.info("Starts to installation flows")
+
             count = 0
             # origin_in_port = in_port
             if len(shortest_path_list) == 1:
@@ -305,11 +306,11 @@ class SimpleSwitch13(app_manager.RyuApp):
 
             else:
                 # more than one nodes in the shortest path list
-                print "\t Go through each node to install flows"
+                print "\tGo through each node to install flows"
                 for node in shortest_path_list:
                     next_datapath = self.dpid_datapathObj[node]
                     next_node = shortest_path_list[count + 1]
-                    print "\t working on node %s" % (node,)
+                    print "\tworking on node %s" % (self._hostname_Check(node),)
                     output_port = self.link_port[node][next_node]
                     actions = [parser.OFPActionOutput(output_port)]
                     # print output_port
@@ -318,39 +319,44 @@ class SimpleSwitch13(app_manager.RyuApp):
                     if msg.buffer_id == ofproto.OFP_NO_BUFFER:
                         data = msg.data
                     match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
-                    print "\tinstall flow at node: %s" % (node,)
+                    print "\tinstall flow at node: %s" % (self._hostname_Check(node),)
+                    print "\t", "in_port %s from dpid %s output_port %s" % (
+                        in_port, self._hostname_Check(node),
+                        output_port)
                     self.add_flow(next_datapath, ICMP_PRIORITY, match, actions, msg.buffer_id)
+
                     reserse_match = parser.OFPMatch(in_port=output_port, eth_dst=src)
                     reserse_action = [parser.OFPActionOutput(in_port)]
-                    print "\tinstall reverse flow at node: %s" % (next_datapath,)
+                    print "\tinstall reverse flow at node: %s" % (self._hostname_Check(node),)
+                    print "\t", "in_port %s from dpid %s output_port %s" % (
+                        output_port, self._hostname_Check(node),
+                        in_port)
                     self.add_flow(next_datapath, ICMP_PRIORITY, reserse_match, reserse_action, msg.buffer_id)
 
-                    print "\t", "in_port %s from dpid %s output_port %s To dpid %s" % (
-                        in_port, self._hostname_Check(node),
-                        output_port, self._hostname_Check(next_node))
                     count += 1
                     in_port = self.link_port[next_node][node]
                     if count == len(shortest_path_list) - 1:
                         last_node = shortest_path_list[-1]
                         next_datapath = self.dpid_datapathObj[last_node]
-                        print "\t working on node %s and this is the last stop" % (last_node,)
+                        print "\t working on node %s and this is the last stop" % (self._hostname_Check(last_node),)
                         # print self.mac_to_port
                         # output_port = self.mac_to_port[hex(last_node)][dst]
-                        # output_port = int(self._get_output_port(last_node, dst))
+                        output_port = int(self._get_output_port(last_node, dst))
                         actions = [parser.OFPActionOutput(output_port)]
                         in_port = self.link_port[last_node][node]
-                        # new added line for testing
-                        # for key in self.mac_to_port.keys():
-                        #     if last_node == int(str(key), 16):
-                        #         print int(str(key), 16)
-                        #         output_port = self.mac_to_port[key][dst]
                         output_port = int(self._get_output_port(next_datapath.id, dst))
                         match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
+                        print "\tinstall flow at node: %s" % (self._hostname_Check(last_node),)
                         print "\t", "in_port %s from dpid %s output_port %s To node %s" % (
                             in_port, self._hostname_Check(next_node), output_port, dst)
                         self.add_flow(next_datapath, ICMP_PRIORITY, match, actions, msg.buffer_id)
+
                         reserse_match = parser.OFPMatch(in_port=output_port, eth_dst=src)
                         reserse_action = [parser.OFPActionOutput(in_port)]
+                        print "\tinstall reverse flow at node: %s" % (last_node,)
+                        print "\t", "in_port %s from dpid %s output_port %s" % (
+                            output_port, self._hostname_Check(last_node),
+                            in_port)
                         self.add_flow(
                             next_datapath, ICMP_PRIORITY, reserse_match, reserse_action, msg.buffer_id)
                         out = parser.OFPPacketOut(datapath=next_datapath, buffer_id=msg.buffer_id,
