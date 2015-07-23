@@ -1,2 +1,2 @@
-datapath         hostname   in-port       duration_sec   duration_nsec             eth-dst  out-port packets  bytes    speed(bytes/sec)
----------------- ---------- -------- ------------------ -------------- ----------------------- -------- -------- -------- --------------
+datapath         hostname   in-port       duration_sec   duration_nsec             eth-dst  out-port packets  bytes    speed(bits/sec)   priority
+---------------- ---------- -------- ------------------ -------------- ----------------------- -------- -------- -------- -------------- ----

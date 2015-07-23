@@ -1,5 +1,5 @@
-datapath         hostname       port     duration_sec  duration_nsec rx-pkts    rx-bytes rx-error  tx-pkts  tx-bytes tx-error
+datapath         hostname       port     duration_sec  duration_nsec rx-pkts    rx-bytes rx-error  tx-pkts  tx-bytes tx-error    speed(bits/sec)
 ---------------- -------------- ----- ------------- ---------------- -------- -------- -------- -------- -------- -------- --------------
-00007e8a4881e74e       s2        1           353781        968000000    69338  3554309        0    73733  5031996        0        75.524476
-00007e8a4881e74e       s2        2           353781        102000000    76536  4370912        0    66449  4109574        0        71.328671
-00007e8a4881e74e       s2 fffffffe           353782        813000000        0        0        0     1004    59148        0         0.000000
+00007e8a4881e74e       s2        1           165433        199000000    23058   984550        0    21725  1113236        0              360
+00007e8a4881e74e       s2        2           165433        200000000    24455  1057780        0    21834  1119300        0              360
+00007e8a4881e74e       s2 fffffffe           165433        181000000        0        0        0      148     8636        0                0

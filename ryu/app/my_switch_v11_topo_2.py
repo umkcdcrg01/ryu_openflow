@@ -15,7 +15,7 @@
 # Simple switch V11 for topology 2
 # Jack Zhao
 # s.zhao.j@gmail.com# 
-# szb53@h4:~/ryu/ryu/app$ ryu-manager --observe-links my_switch_v11_topo_2.py host_tracker_topo_2.py my_arp_v3_topo_2.py my_monitor_v3_topo_2.py
+# szb53@h4:~/ryu/ryu/app$ ryu-manager --observe-links my_switch_v11_topo_2.py host_tracker_topo_2.py my_arp_v4_topo_2.py my_monitor_v3_topo_2.py
 # How to run:
 # issue: Web http://192.1.242.160:8080 does not show any topology
 # debug: 
@@ -67,6 +67,7 @@ OFP_SWITCHES_LIST_SCRIPT = \
 #     './network-data2/ofp_switches_{0}_port_stats_prev.db'
 OFP_SINGLE_SHOREST_PATH = './network-data2/ofp_single_shortest_path.db'
 OFP_ALL_PAIRS_SHOREST_PATH = './network-data2/ofp_all_pairs_shortest_path.db'
+OFP_ALL_SIMPLE_PATH = './network-data2/ofp_all_simple_path.db'
 OFP_ALL_PATHS_SHOREST_PATH = './network-data2/ofp_all_paths_shortest_path.db'
 OFP_MAC_TO_PORT = './network-data2/ofp_mac_to_port.db'
 OFP_LINK_PORT = './network-data2/ofp_link_port.db'
@@ -459,9 +460,7 @@ class SimpleSwitch13(app_manager.RyuApp):
             return [i for i in shortest_path]
 
     def _all_single_shortest_path(self):
-        # print "Printing shortest Path..."
-        # print nx.shortest_path(self.net)
-        # print "_single_shortest_path " # ,self.net.nodes(), self.net.edges()
+        self.logger.debug("Outputing shortest Path...")
         with open(OFP_SINGLE_SHOREST_PATH, 'w') as outp:
             for src in self.net.nodes():
                 for dst in self.net.nodes():
@@ -471,17 +470,12 @@ class SimpleSwitch13(app_manager.RyuApp):
                         except Exception as e:
                             self.logger.info("\t _single_shortest_path %s", e)
                         finally:
-                            outp.write("%s -> %s %s" % (self._hostname_Check(src),
-                                                        self._hostname_Check(dst),
-                                                        [self._hostname_Check(i) for i in shortest_path]))
+                            outp.write("%s->%s " % (self._hostname_Check(src), self._hostname_Check(dst)))
+                            for each_node in shortest_path:
+                                outp.write("%s-" % self._hostname_Check(each_node))
                             outp.write("\n")
-                        # print self._hostname_Check(src), " -> ",\
-                        #     self._hostname_Check(dst), " ",\
-                        #     [self._hostname_Check(i) for i in shortest_path]
 
     def _all_paris_shortest_path(self):
-        # print one shortest path for all node pairs
-        # print "_all_paris_shortest_path ", self.net
         with open(OFP_ALL_PAIRS_SHOREST_PATH, 'w') as outp:
             try:
                 shortest_path = nx.all_pairs_dijkstra_path(self.net)
@@ -490,17 +484,15 @@ class SimpleSwitch13(app_manager.RyuApp):
             finally:
                 for src in shortest_path.keys():
                     for dst in shortest_path[src]:
-                        outp.write("%s -> %s %s\n" % (self._hostname_Check(src),
-                                                      self._hostname_Check(dst),
-                                                      [self._hostname_Check(i) for i in shortest_path[src][dst]]))
-                        # print self._hostname_Check(src), " -> ", self._hostname_Check(dst),\
-                        #     " ", [self._hostname_Check(i)
-                        #           for i in shortest_path[src][dst]]
+                        # outp.write("%s->%s %s\n" % (self._hostname_Check(src),
+                        #                               self._hostname_Check(dst),
+                        #                               [self._hostname_Check(i) for i in shortest_path[src][dst]]))
+                        outp.write("%s->%s " % (self._hostname_Check(src), self._hostname_Check(dst)))
+                        for each_node in shortest_path[src][dst]:
+                            outp.write("%s-" % self._hostname_Check(each_node))
+                        outp.write("\n")
 
     def _all_paths_shortest_path(self):
-        # print all the shortest paths for each node pair
-        # print "_all_paths_shortest_path ", self.net
-        # print "my_switch_13_v9: _all_paths_shortest_path:"
         with open(OFP_ALL_PATHS_SHOREST_PATH, 'w') as outp:
             for src in self.net.nodes():
                 for dst in self.net.nodes():
@@ -511,13 +503,27 @@ class SimpleSwitch13(app_manager.RyuApp):
                             self.logger.info("_all_path_shortest_path %s", e)
                         finally:
                             for each_path_list in shortest_path:
-                                outp.write("%s -> %s %s" % (self._hostname_Check(src),
+                                outp.write("%s->%s %s" % (self._hostname_Check(src),
                                                             self._hostname_Check(dst),
                                                             [self._hostname_Check(i) for i in each_path_list]))
                                 outp.write("\n")
-                                # print("%s -> %s %s" % (self._hostname_Check(src),
-                                #                        self._hostname_Check(dst),
-                                #                        [self._hostname_Check(i) for i in each_path_list]))
+
+    def _all_simple_path(self):
+        self.logger.debug("Outputing shortest Path...")
+        with open(OFP_ALL_SIMPLE_PATH, 'w') as outp:
+            for src in self.net.nodes():
+                for dst in self.net.nodes():
+                    if src != dst:
+                        try:
+                            shortest_path = nx.all_simple_paths(self.net, src, dst)
+                        except Exception as e:
+                            self.logger.info("\t_all_simple_path %s", e)
+                        finally:
+                            for each_path_list in shortest_path:
+                                outp.write("%s->%s " % (self._hostname_Check(src), self._hostname_Check(dst)))
+                                for each_node in each_path_list:
+                                    outp.write("%s-" % self._hostname_Check(each_node))
+                                outp.write("\n")
 
     ###################################################################
     # write mac_to_port in every 10s
@@ -628,12 +634,12 @@ class SimpleSwitch13(app_manager.RyuApp):
         while True:
             for dp in self.datapaths.values():
                 self._mac_to_port()
-                # self._request_stats(dp)
                 # self._update_switch_dpid_list()
-                # self._all_single_shortest_path()
-                # self._all_paris_shortest_path()
-                # self._all_paths_shortest_path()
+                self._all_single_shortest_path()
+                self._all_paris_shortest_path()
+                self._all_paths_shortest_path()
                 self._link_port()
+                self._all_simple_path()
             hub.sleep(10)
 
     # The switch notifies controller of change of ports.

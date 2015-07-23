@@ -29,6 +29,10 @@ OFP_SWITCHES_LIST = \
 
 
 ICMP_PRIORITY = 3
+IPERF_PRIORITY = 4
+PRIORITY_LIST = [ICMP_PRIORITY, IPERF_PRIORITY]
+FLOW_STATS_UPDATE_TIMER = 3
+
 
 
 class MySimpleMonitor(app_manager.RyuApp):
@@ -141,38 +145,38 @@ class MySimpleMonitor(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_handler(self, ev):
-        self.logger.info("simple_monitor.flow_stats:")
+        self.logger.debug("simple_monitor.flow_stats:")
         body = ev.msg.body
         dpid = ev.msg.datapath.id
-        self.logger.info("Switch Flow States Msg reply Details")
+        self.logger.debug("Switch Flow States Msg reply Details")
         # for entry in ev.msg.body:
         #     if type(entry) == {}:
         #         for key, value in entry.items():
-        #             self.logg.info(("%s: %s") % (key, value))
-        #     self.logger.info(entry)
+        #             self.logg.debug(("%s: %s") % (key, value))
+        #     self.logger.debug(entry)
 
         switch_name = self._hostname_Check(ev.msg.datapath.id)
 
         with open(OFP_SWITCHES_FLOW_STATS.format(switch_name), 'w') as iff:
             # print "writing to %s" % (os.path.abspath(OFP_SWITCHES_FLOW_STATS.format(switch_name)))
-            self.logger.info("\n> Flow Stats:")
-            self.logger.info('datapath         '
-                             'hostname   '
-                             'in-port       duration_sec   duration_nsec       '
-                             '   eth-dst  out-port packets  bytes    speed(bytes/sec)')
-            self.logger.info('---------------- '
-                             '---------- '
-                             '-------- ---------------- -------------- '
-                             '------------------- -------- -------- -------- --------------')
+            self.logger.debug("\n> Flow Stats:")
+            self.logger.debug('datapath         '
+                              'hostname   '
+                              'in-port       duration_sec   duration_nsec       '
+                              '   eth-dst  out-port packets  bytes    speed(bits/sec)')
+            self.logger.debug('---------------- '
+                              '---------- '
+                              '-------- ---------------- -------------- '
+                              '------------------- -------- -------- -------- --------------')
             iff.write('datapath         '
                       'hostname   '
                       'in-port       duration_sec   duration_nsec       '
-                      '      eth-dst  out-port packets  bytes    speed(bytes/sec)\n')
+                      '      eth-dst  out-port packets  bytes    speed(bits/sec)   priority\n')
             iff.write('---------------- '
                       '---------- '
                       '-------- ------------------ -------------- '
-                      '----------------------- -------- -------- -------- --------------\n')
-            for stat in sorted([flow for flow in body if flow.priority == ICMP_PRIORITY],
+                      '----------------------- -------- -------- -------- -------------- ----\n')
+            for stat in sorted([flow for flow in body if flow.priority == ICMP_PRIORITY or flow.priority == IPERF_PRIORITY],
                                key=lambda flow: (flow.match['in_port'],
                                                  flow.match['eth_dst'])):
                 # update flow stats
@@ -204,79 +208,79 @@ class MySimpleMonitor(app_manager.RyuApp):
                     period = self._get_period(
                         tmp[-1][2], tmp[-1][3],
                         tmp[-2][2], tmp[-2][3])
-                    self.logger.info("%s %s %s %s" %
-                                     (tmp[-1][2], tmp[-1][3], tmp[-2][2], tmp[-2][3]))
+                    self.logger.debug("%s %s %s %s" %
+                                      (tmp[-1][2], tmp[-1][3], tmp[-2][2], tmp[-2][3]))
                 # key[-1][1]: current flow's byte_count
                 # speed: eacho flow's current speed (every 10s)
                 speed = self._get_speed(
                     self.flow_stats[key][-1][1], pre, period)
 
-                self.logger.info("pre_byte=%s current_byte=%s  period=%s speed=%s" % (pre, self.flow_stats[key][-1][1], period, speed))
+                self.logger.debug("pre_byte=%s current_byte=%s  period=%s speed=%s" % (pre, self.flow_stats[key][-1][1], period, speed))
                 if speed == None:
-                    self.logger.info("Speed == None ----------------------------------------------------------")
+                    self.logger.debug("Speed == None ----------------------------------------------------------")
                     speed = 0.0
 
                 self._save_stats(self.flow_speed, key, speed, self.state_len)
 
-                iff.write('%16d %8s %8x %16d %16d %17s %8x %8d %8d %16f' %
+                iff.write('%16d %8s %8x %16d %16d %17s %8x %8d %8d %16d %10d' %
                           (ev.msg.datapath.id,
                            # str(ev.msg.datapath.id),
                            self._hostname_Check(ev.msg.datapath.id),
                            stat.match['in_port'], stat.duration_sec,
                            stat.duration_nsec, stat.match['eth_dst'],
                            stat.instructions[0].actions[0].port,
-                           stat.packet_count, stat.byte_count, speed))
+                           stat.packet_count, stat.byte_count, int(speed) * 8, flow.priority))
                 iff.write("\n")
-                self.logger.info('%16d %8s %8x %16d %16d %17s %8x %8d %8d %16f',
-                                 ev.msg.datapath.id,
-                                 # str(ev.msg.datapath.id),
-                                 self._hostname_Check(ev.msg.datapath.id),
-                                 stat.match['in_port'], stat.duration_sec,
-                                 stat.duration_nsec, stat.match['eth_dst'],
-                                 stat.instructions[0].actions[0].port,
-                                 stat.packet_count, stat.byte_count,
-                                 speed)
+                self.logger.debug('%16d %8s %8x %16d %16d %17s %8x %8d %8d %16d',
+                                  ev.msg.datapath.id,
+                                  # str(ev.msg.datapath.id),
+                                  self._hostname_Check(ev.msg.datapath.id),
+                                  stat.match['in_port'], stat.duration_sec,
+                                  stat.duration_nsec, stat.match['eth_dst'],
+                                  stat.instructions[0].actions[0].port,
+                                  stat.packet_count, stat.byte_count,
+                                  int(speed) * 8)
         # print each key, value for verification
-        # self.logger.info("flow_sttas:")
+        # self.logger.debug("flow_sttas:")
         # for key, val in self.flow_stats.items():
-        #     self.logger.info("  key=%s    value=%s" % (key, val))
+        #     self.logger.debug("  key=%s    value=%s" % (key, val))
 
-        # self.logger.info("flow_speed:")
+        # self.logger.debug("flow_speed:")
         # for key, val in self.flow_speed.items():
-        #     self.logger.info("  key=%s    value=%s" % (key, val))
+        #     self.logger.debug("  key=%s    value=%s" % (key, val))
 
     @set_ev_cls(ofp_event.EventOFPPortStatsReply, MAIN_DISPATCHER)
     def _port_stats_reply_handler(self, ev):
-        self.logger.info("simple_monitor.port_stats:")
+        self.logger.debug("simple_monitor.port_stats:")
         body = ev.msg.body
         dpid = ev.msg.datapath.id
-        self.logger.info("Switch Port States Msg reply Details")
+        self.logger.debug("Switch Port States Msg reply Details")
         # for entry in ev.msg.body:
         #     if type(entry) == {}:
         #         for key, value in entry.items():
-        #             self.logg.info(("%s: %s") % (key, value))
-        #     self.logger.info(entry)
+        #             self.logg.debug(("%s: %s") % (key, value))
+        #     self.logger.debug(entry)
 
         switch_name = self._hostname_Check(ev.msg.datapath.id)
 
         with open(OFP_SWITCHES_PORT_STATS.format(switch_name), 'w') as iff:
             # print "writing to %s" % (os.path.abspath(OFP_SWITCHES_PORT_STATS.format(switch_name)))
-            self.logger.info("\n> Port Stats:")
-            self.logger.info('datapath         '
-                             'hostname       '
-                             'port     duration_sec  duration_nsec'
-                             ' rx-pkts    rx-bytes rx-error '
-                             ' tx-pkts  tx-bytes tx-error    speed(bytes/sec)')
-            self.logger.info('---------------- '
-                             '-------------- '
-                             '----- ------------- ---------------- '
-                             '-------- -------- -------- '
-                             '-------- -------- -------- --------------')
+            self.logger.debug("\n> Port Stats:")
+            self.logger.debug('datapath         '
+                              'hostname       '
+                              'port     duration_sec  duration_nsec'
+                              ' rx-pkts    rx-bytes rx-error '
+                              ' tx-pkts  tx-bytes tx-error    speed(bits/sec)')
+            self.logger.debug('---------------- '
+                              '-------------- '
+                              '----- ------------- ---------------- '
+                              '-------- -------- -------- '
+                              '-------- -------- -------- --------------')
             iff.write('datapath         '
                       'hostname       '
                       'port     duration_sec  duration_nsec'
                       ' rx-pkts    rx-bytes rx-error '
-                      ' tx-pkts  tx-bytes tx-error\n')
+                      ' tx-pkts  tx-bytes tx-error    speed(bits/sec)\n')
             iff.write('---------------- '
                       '-------------- '
                       '----- ------------- ---------------- '
@@ -318,25 +322,25 @@ class MySimpleMonitor(app_manager.RyuApp):
                 self._save_stats(self.port_speed, key, speed, self.state_len)
                 # print '\n Speed: %s bytes\/s\n' % (self.port_speed)
 
-                self.logger.info('%016x %8s %8x %16d %16d %8d %8d %8d %8d %8d %8d %16f',
-                                 ev.msg.datapath.id,
-                                 self._hostname_Check(ev.msg.datapath.id),
-                                 stat.port_no, stat.duration_sec, stat.duration_nsec,
-                                 stat.rx_packets, stat.rx_bytes,
-                                 stat.rx_errors, stat.tx_packets,
-                                 stat.tx_bytes, stat.tx_errors, speed)
-                iff.write('%016x %8s %8x %16d %16d %8d %8d %8d %8d %8d %8d %16f' %
+                self.logger.debug('%016x %8s %8x %16d %16d %8d %8d %8d %8d %8d %8d %16d',
+                                  ev.msg.datapath.id,
+                                  self._hostname_Check(ev.msg.datapath.id),
+                                  stat.port_no, stat.duration_sec, stat.duration_nsec,
+                                  stat.rx_packets, stat.rx_bytes,
+                                  stat.rx_errors, stat.tx_packets,
+                                  stat.tx_bytes, stat.tx_errors, int(speed) * 8)
+                iff.write('%016x %8s %8x %16d %16d %8d %8d %8d %8d %8d %8d %16d' %
                           (ev.msg.datapath.id,
                            self._hostname_Check(ev.msg.datapath.id),
                            stat.port_no, stat.duration_sec, stat.duration_nsec,
                            stat.rx_packets, stat.rx_bytes, stat.rx_errors,
-                           stat.tx_packets, stat.tx_bytes, stat.tx_errors, speed))
+                           stat.tx_packets, stat.tx_bytes, stat.tx_errors, int(speed) * 8))
                 iff.write("\n")
         # print each key, value for verification
-        # self.logger.info("port_sttas:")
+        # self.logger.debug("port_sttas:")
         # for key, val in self.port_stats.items():
-        #     self.logger.info("  key=%s    value=%s" % (key, val))
+        #     self.logger.debug("  key=%s    value=%s" % (key, val))
 
-        # self.logger.info("port_speed:")
+        # self.logger.debug("port_speed:")
         # for key, val in self.port_speed.items():
-        #     self.logger.info("  key=%s    value=%s" % (key, val))
+        #     self.logger.debug("  key=%s    value=%s" % (key, val))

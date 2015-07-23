@@ -1,4 +1,4 @@
-#  Simple Arp Handler v3 for topology 2
+#  Simple Arp Handler v4 for topology 2
 #  Jack Zhao
 #  s.zhao.j@gmail.com
 
@@ -32,6 +32,7 @@ OFP_SWITCHES_LIST = \
 # OFP_SWITCHES_LIST_SCRIPT = \
 #     './scripts/remote_ovs_operation/get_switch_ofpbr_datapath_id.sh'
 
+ARP_ENTRY_EXPIRE = 1
 
 class MySimpleArp(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
@@ -157,13 +158,19 @@ class MySimpleArp(app_manager.RyuApp):
                 test = True
                 return test
             elif ((etherFrame.src, arp_dstIP, inPort) in self.packetToport[datapath.id].keys()):
-                self.logger.info("\t2 ARP BLOCKING, No Further transfer")
+                if(time.time() - self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)]) >= ARP_ENTRY_EXPIRE:
+                    self.logger.info("\t2 ARP ENTRY Expired, renew the timer")
+                    self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)] = time.time()
+                    test = True
+                    return test
+                else:
+                    self.logger.info("\t2 ARP BLOCKING, No Further transfer")
                 # self.logger.info("Another muticast packet form %s at %i port in %s " % (
                 #     etherFrame.src, inPort, self._hostname_Check(datapath.id)))
                 # self.logger.info("{DPID: { (src_mac, dst_ip, in_port): arpArriveTime, ():time }")
-                self.logger.info("\t %s %s" % (self._hostname_Check(datapath.id), self.packetToport[datapath.id].keys()))
-                test = False
-                return test
+                    self.logger.info("\t %s %s" % (self._hostname_Check(datapath.id), self.packetToport[datapath.id].keys()))
+                    test = False
+                    return test
             else:
                 # same ARP broadcast but from inport number is diffeernt from original port nubmer, block
                 for keys in self.packetToport[datapath.id].keys():
