@@ -32,7 +32,7 @@ OFP_SWITCHES_LIST = \
 # OFP_SWITCHES_LIST_SCRIPT = \
 #     './scripts/remote_ovs_operation/get_switch_ofpbr_datapath_id.sh'
 
-ARP_ENTRY_EXPIRE = 1
+ARP_ENTRY_EXPIRE = 0.5
 
 class MySimpleArp(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]

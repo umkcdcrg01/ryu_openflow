@@ -14,12 +14,12 @@
 # limitations under the License.
 # Simple switch V11 for topology 2
 # Jack Zhao
-# s.zhao.j@gmail.com# 
-# szb53@h4:~/ryu/ryu/app$ ryu-manager --observe-links my_switch_v11_topo_2.py 
+# s.zhao.j@gmail.com#
+# szb53@h4:~/ryu/ryu/app$ ryu-manager --observe-links my_switch_v12_topo_2.py
 #               my_arp_v4_topo_2.py my_monitor_v4_topo_2.py host_tracker_topo_2.py gui_topology/gui_topology.py iperf_controller_v1.py
 # How to run:
 # issue: Web http://192.1.242.160:8080 does not show any topology
-# debug: 
+# add more match field for ICMP package
 
 from ryu.base import app_manager
 from ryu.controller import ofp_event
@@ -254,6 +254,8 @@ class SimpleSwitch13(app_manager.RyuApp):
         # processing icmp packet only
         if pkt_icmp and pkt_icmp.type == icmp.ICMP_ECHO_REQUEST:
             print "\nICMP From %s src_mac %s dst_mac %s" % (self._hostname_Check(datapath.id), src, dst)
+            src_ip = pkt_ipv4.src
+            dst_ip = pkt_ipv4.dst
 
             shortest_path_list = (
                 self._handle_icmp(datapath, in_port, pkt_ethernet, pkt_ipv4, pkt_icmp))
@@ -261,7 +263,7 @@ class SimpleSwitch13(app_manager.RyuApp):
                 print "\tCould not find Destination IP. Exit Now"
                 return
             else:
-                #print "\tfound shortest Path list", shortest_path_list
+                # print "\tfound shortest Path list", shortest_path_list
                 print "\tfound shortest Path list", [self._hostname_Check(path) for path in shortest_path_list]
 
             self.logger.info("Starts to installation flows")
@@ -287,8 +289,10 @@ class SimpleSwitch13(app_manager.RyuApp):
                     data = msg.data
                 print "\t", "in_port:", in_port, type(in_port), " output_port: ", output_port, type(output_port)
                 try:
-                    match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
-                    reserse_match = parser.OFPMatch(in_port=output_port, eth_dst=src)
+                    match = parser.OFPMatch(in_port=in_port, eth_dst=dst, eth_type=0x0800, ipv4_src=src_ip,
+                                                    ipv4_dst=dst_ip, ip_proto=1)
+                    reserse_match = parser.OFPMatch(in_port=output_port, eth_dst=src, eth_type=0x0800, ipv4_src=dst_ip,
+                                                    ipv4_dst=src_ip, ip_proto=1)
                     reserse_action = [parser.OFPActionOutput(in_port)]
                     if msg.buffer_id != ofproto.OFP_NO_BUFFER:
                         self.add_flow(next_datapath, ICMP_PRIORITY, match, actions, msg.buffer_id)
@@ -320,14 +324,16 @@ class SimpleSwitch13(app_manager.RyuApp):
                     data = None
                     if msg.buffer_id == ofproto.OFP_NO_BUFFER:
                         data = msg.data
-                    match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
+                    match = parser.OFPMatch(in_port=in_port, eth_dst=dst, eth_type=0x0800, ipv4_src=src_ip,
+                                                    ipv4_dst=dst_ip, ip_proto=1)
                     print "\tinstall flow at node: %s" % (self._hostname_Check(node),)
                     print "\t", "in_port %s from dpid %s output_port %s" % (
                         in_port, self._hostname_Check(node),
                         output_port)
                     self.add_flow(next_datapath, ICMP_PRIORITY, match, actions, msg.buffer_id)
 
-                    reserse_match = parser.OFPMatch(in_port=output_port, eth_dst=src)
+                    reserse_match = parser.OFPMatch(in_port=output_port, eth_dst=src, eth_type=0x0800, ipv4_src=dst_ip,
+                                                    ipv4_dst=src_ip, ip_proto=1)
                     reserse_action = [parser.OFPActionOutput(in_port)]
                     print "\tinstall reverse flow at node: %s" % (self._hostname_Check(node),)
                     print "\t", "in_port %s from dpid %s output_port %s" % (
@@ -347,13 +353,15 @@ class SimpleSwitch13(app_manager.RyuApp):
                         actions = [parser.OFPActionOutput(output_port)]
                         in_port = self.link_port[last_node][node]
                         output_port = int(self._get_output_port(next_datapath.id, dst))
-                        match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
+                        match = parser.OFPMatch(in_port=in_port, eth_dst=dst, eth_type=0x0800, ipv4_src=src_ip,
+                                                    ipv4_dst=dst_ip, ip_proto=1)
                         print "\tinstall flow at node: %s" % (self._hostname_Check(last_node),)
                         print "\t", "in_port %s from dpid %s output_port %s To node %s" % (
                             in_port, self._hostname_Check(next_node), output_port, dst)
                         self.add_flow(next_datapath, ICMP_PRIORITY, match, actions, msg.buffer_id)
 
-                        reserse_match = parser.OFPMatch(in_port=output_port, eth_dst=src)
+                        reserse_match = parser.OFPMatch(in_port=output_port, eth_dst=src, eth_type=0x0800, ipv4_src=dst_ip,
+                                                    ipv4_dst=src_ip, ip_proto=1)
                         reserse_action = [parser.OFPActionOutput(in_port)]
                         print "\tinstall reverse flow at node: %s" % (last_node,)
                         print "\t", "in_port %s from dpid %s output_port %s" % (
@@ -505,8 +513,8 @@ class SimpleSwitch13(app_manager.RyuApp):
                         finally:
                             for each_path_list in shortest_path:
                                 outp.write("%s->%s %s" % (self._hostname_Check(src),
-                                                            self._hostname_Check(dst),
-                                                            [self._hostname_Check(i) for i in each_path_list]))
+                                                          self._hostname_Check(dst),
+                                                          [self._hostname_Check(i) for i in each_path_list]))
                                 outp.write("\n")
 
     def _all_simple_path(self):

@@ -1,6 +1,8 @@
-#  monitoring v3 for topology 2
+#  monitoring v4 for topology 2
 #  Jack Zhao
 #  s.zhao.j@gmail.com
+# fix negative output values
+
 from __future__ import division
 from operator import attrgetter
 from ryu.base import app_manager
@@ -109,6 +111,8 @@ class MySimpleMonitor(app_manager.RyuApp):
         if len(dist[key]) > length:
             dist[key].pop(0)
 
+        # self.logger.info("\tFlow stats dictionary %s" % dict)
+
     def _get_speed(self, now, pre, period):
         """
         return flow speed: bytes/sec
@@ -117,7 +121,11 @@ class MySimpleMonitor(app_manager.RyuApp):
         if period == 0:
             # if flow stat does not change, return
             return
-        return (now - pre) / period
+        speed = (now - pre) / period
+        if speed < 0:
+            # check if the speed is negative
+            self.logger.info("\t!!!!!!!!!!!!Flow stats dictionary %s !!!!!!!!!!!!!!!!" % self.flow_stats)
+        return speed
 
     def _get_time(self, sec, nsec):
         """
@@ -138,12 +146,12 @@ class MySimpleMonitor(app_manager.RyuApp):
         self.logger.debug("simple_monitor.flow_stats:")
         body = ev.msg.body
         dpid = ev.msg.datapath.id
-        self.logger.debug("Switch Flow States Msg reply Details")
+        # self.logger.info("\tSwitch Flow States Msg reply Details")
         # for entry in ev.msg.body:
         #     if type(entry) == {}:
         #         for key, value in entry.items():
-        #             self.logg.debug(("%s: %s") % (key, value))
-        #     self.logger.debug(entry)
+        #             self.logg.info(("\t%s: %s") % (key, value))
+        #     self.logger.info(entry)
 
         switch_name = self._hostname_Check(ev.msg.datapath.id)
 
@@ -153,11 +161,11 @@ class MySimpleMonitor(app_manager.RyuApp):
             self.logger.debug('datapath         '
                               'hostname   '
                               'in-port       duration_sec   duration_nsec       '
-                              '   eth-dst  out-port packets  bytes    speed(bits/sec)')
+                              '   eth-dst  out-port packets  bytes    speed(bits/sec)   priority')
             self.logger.debug('---------------- '
                               '---------- '
                               '-------- ---------------- -------------- '
-                              '------------------- -------- -------- -------- --------------')
+                              '------------------- -------- -------- -------- -------------- ----')
             iff.write('datapath         '
                       'hostname   '
                       'in-port       duration_sec   duration_nsec       '
@@ -172,9 +180,22 @@ class MySimpleMonitor(app_manager.RyuApp):
                 # update flow stats
                 # key (dpid, in_port, dst_mac, output_port)
                 # key is a tuple
-                key = (dpid,
-                       stat.match['in_port'], stat.match['eth_dst'],
-                       stat.instructions[0].actions[0].port,)
+                self.logger.info("\t stat.match[ip_proto] = %s" % stat.match['ip_proto'])
+                if str(stat.match['ip_proto']) == str(1):  # ICMP package
+                    key = (dpid,
+                           stat.match['in_port'], stat.match['eth_dst'],
+                           stat.instructions[0].actions[0].port, stat.match['ip_proto'])
+                    self.logger.info(key)
+                elif str(stat.match['ip_proto']) == str(6):  # IPERF package:
+                    key = (dpid,
+                           stat.match['in_port'], stat.match['eth_dst'],
+                           stat.instructions[0].actions[0].port, stat.match['ip_proto'], stat.match['tcp_src'], stat.match['tcp_dst'])
+                    self.logger.info(key)
+                else:
+                    key = (dpid,
+                           stat.match['in_port'], stat.match['eth_dst'],
+                           stat.instructions[0].actions[0].port)
+                    self.logger.info(key)
                 # value (packet_count, byte_count, duration_sec, duration_msec)
                 # value is a tuple, It will be appended to self.flow_stats[key]
                 value = (
@@ -246,11 +267,11 @@ class MySimpleMonitor(app_manager.RyuApp):
         self.logger.debug("simple_monitor.port_stats:")
         body = ev.msg.body
         dpid = ev.msg.datapath.id
-        self.logger.debug("Switch Port States Msg reply Details")
+        self.logger.debug("\tSwitch Port States Msg reply Details")
         # for entry in ev.msg.body:
         #     if type(entry) == {}:
         #         for key, value in entry.items():
-        #             self.logg.debug(("%s: %s") % (key, value))
+        #             self.logg.debug(("\t%s: %s") % (key, value))
         #     self.logger.debug(entry)
 
         switch_name = self._hostname_Check(ev.msg.datapath.id)

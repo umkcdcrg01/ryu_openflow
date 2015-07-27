@@ -186,14 +186,14 @@ class IperfController(app_manager.RyuApp):
             # parser = datapath.ofproto_parser
             tcp_src_port = pkt_tcp.src_port
             tcp_dst_port = pkt_tcp.dst_port
-            self.logger.info("IperfController: Packet-In:")
+            self.logger.debug("IperfController: Packet-In:")
             self.logger.info("\tAt %s from %s to %s from src_port %s to dst_port %s from  port %s src_mac %s dst_mac %s" %
                              (self._hostname_Check(datapath.id), src_ip, dst_ip, tcp_src_port, tcp_dst_port, in_port, src_mac, dst_mac))
             if str(tcp_dst_port) == '5001':
-                self.logger.debug("\tOnly process the first IPERF client request")
                 key = (src_ip, dst_ip, src_mac, dst_mac, tcp_dst_port)
                 if key not in self.iperf_learning.keys():
                     self.logger.info("\t##################################")
+                    self.logger.debug("\tOnly process the first IPERF client request")
                     self.logger.info("\tThis is a new Iperf client request!! Added to self.iperf_learning dict")
                     # if self.iperf_learning is empty
 
@@ -202,7 +202,7 @@ class IperfController(app_manager.RyuApp):
                     self.iperf_learning[key] = value
                 elif key in self.iperf_learning.keys():
                     if time.time() - self.iperf_learning[key] >= IPERF_KEY_LEARNING_TIMER:
-                        self.logger.info("\t(src_ip, dst_ip, src_mac, dst_mac, tcp_dst_port, in_port) time out from self.iperf_learning dict!!!")
+                        self.logger.info("\t(src_ip, dst_ip, src_mac, dst_mac, tcp_dst_port, in_port) TIMEOUT from self.iperf_learning dict!!!")
                         del self.iperf_learning[key]
                         self.iperf_learning[key] = time.time()
                     else:
@@ -210,10 +210,13 @@ class IperfController(app_manager.RyuApp):
                 else:
                     return
                 src_dpid_name = self._hostname_Check(datapath.id)
-                self.logger.info("\tInstall Iperf flow between IP address %s and %s \n\tsleeping for 5s ........................" % (src_ip, dst_ip))
+                self.logger.info("\tInstall Iperf flow between IP address %s and %s \n\tsleeping for 5 s ........................" % (src_ip, dst_ip))
                 time.sleep(5)
                 # find dstination datapath id from host_tracker file
                 dst_dpid_name = self.return_dst_dpid_hostname(dst_ip, dst_mac)
+                if dst_dpid_name == None:
+                    self.logger.info("\tcould not find destination switch..............")
+                    return
 
                 self.logger.info("\tInstall Iperf flow between %s and %s" % (src_dpid_name, dst_dpid_name))
 
@@ -346,7 +349,7 @@ class IperfController(app_manager.RyuApp):
                     break
         if dst_dpid_name == None:
             self.logger.info("\tsleeping for another 10 s ........................")
-            time.sleep(15)
+            time.sleep(10)
             with open(OFP_HOST_SWITCHES_LIST, 'r') as inp:
                 for lines in inp:
                     ip_address, dpid, inport, host_mac = lines.split()
