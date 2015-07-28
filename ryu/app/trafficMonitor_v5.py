@@ -8,10 +8,8 @@ from operator import attrgetter
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
-from ryu.controller.handler import CONFIG_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
-from ryu.lib.packet import packet
 import os.path
 import os
 # from my_switch_v11_topo_2 import SimpleSwitch13
@@ -180,22 +178,27 @@ class MySimpleMonitor(app_manager.RyuApp):
                 # update flow stats
                 # key (dpid, in_port, dst_mac, output_port)
                 # key is a tuple
-                self.logger.info("\t stat.match[ip_proto] = %s" % stat.match['ip_proto'])
+                self.logger.debug("\t stat.match[ip_proto] = %s" % stat.match['ip_proto'])
                 if str(stat.match['ip_proto']) == str(1):  # ICMP package
                     key = (dpid,
                            stat.match['in_port'], stat.match['eth_dst'], stat.match['ipv4_src'], stat.match['ipv4_dst'],
                            stat.instructions[0].actions[0].port, stat.match['ip_proto'])
-                    self.logger.info(key)
-                elif str(stat.match['ip_proto']) == str(6):  # IPERF package:
+                    # self.logger.debug(key)
+                elif str(stat.match['ip_proto']) == str(6):  # IPERF TCP package:
                     key = (dpid,
                            stat.match['in_port'], stat.match['eth_dst'],
                            stat.instructions[0].actions[0].port, stat.match['ip_proto'], stat.match['tcp_src'], stat.match['tcp_dst'])
-                    self.logger.info(key)
+                    # self.logger.debug(key)
+                elif str(stat.match['ip_proto']) == str(17):  # IPERF UDP package:
+                    key = (dpid,
+                           stat.match['in_port'], stat.match['eth_dst'],
+                           stat.instructions[0].actions[0].port, stat.match['ip_proto'], stat.match['udp_src'], stat.match['udp_dst'])
+                    # self.logger.debug(key)
                 else:
                     key = (dpid,
                            stat.match['in_port'], stat.match['eth_dst'],
                            stat.instructions[0].actions[0].port)
-                    self.logger.info(key)
+                    # self.logger.debug(key)
                 # value (packet_count, byte_count, duration_sec, duration_msec)
                 # value is a tuple, It will be appended to self.flow_stats[key]
                 value = (

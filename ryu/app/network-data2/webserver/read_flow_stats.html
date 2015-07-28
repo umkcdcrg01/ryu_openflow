@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+  <script type="text/javascript" src="scripts/d3.min.js"></script>
+    <script type="text/javascript" src="scripts/radialProgress.js"></script>
+    <script src="http://code.jquery.com/jquery-1.7.2.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.5/d3.min.js"></script>
+    <link type="text/css" rel="stylesheet" href="styles/style.css">
+  <style>
+
+    body {
+      font: 10px sans-serif;
+    }
+
+    .axis path,
+    .axis line {
+      fill: none;
+      stroke: #000;
+      shape-rendering: crispEdges;
+    }
+
+    .x.axis path {
+      display: none;
+    }
+
+    .line {
+      fill: none;
+      stroke: steelblue;
+      stroke-width: 1.5px;
+    }
+
+  </style>
+<body>
+  
+<!--   
+    <div id='button'>
+    <button type="button" onclick="start1()">Change Content</button>
+  <div> -->
+
+    <script language="JavaScript">
+       setInterval('start1()', 2000);
+    </script>
+
+  <h2>OVS 1</h2>
+  <div id="myDiv1" id="cmyDiv1">
+  </div>
+  
+  <h2>OVS 2</h2>
+  <div id="myDiv2" id="cmyDiv1">
+  </div>
+  
+  <h2>OVS 3</h2>
+  <div id="myDiv3" id="cmyDiv1">
+  </div>
+  
+
+  <h2>OVS 4</h2>
+  <div id="myDiv4" id="cmyDiv1">
+  </div>
+  
+  <h2>OVS 4</h2>
+  <div id="myDiv5" id="cmyDiv1">
+  </div>
+  
+
+  <script type="text/javascript">
+  function start1() {
+    $(document).ready(function(){
+               $('#myDiv1').load('ofp_switches_s1_flow_stats.csv');
+               $('#myDiv2').load('ofp_switches_s1_flow_stats.csv');
+               $('#myDiv3').load('ofp_switches_s1_flow_stats.csv');
+               $('#myDiv4').load('ofp_switches_s1_flow_stats.csv');
+               $('#myDiv5').load('ofp_switches_s1_flow_stats.csv');
+
+
+           });
+  }
+  </script>
+
+
+</body>

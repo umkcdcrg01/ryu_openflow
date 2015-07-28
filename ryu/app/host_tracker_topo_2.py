@@ -11,17 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 # implied.
 
-import logging
-import json
-from webob import Response
 import time
 from threading import Timer
-
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER
 from ryu.controller.handler import set_ev_cls
-from ryu.controller import dpset
 # from ryu.app.wsgi import ControllerBase, WSGIApplication
 
 from ryu.lib.packet import packet
@@ -29,11 +24,9 @@ from ryu.lib.packet import ethernet
 from ryu.lib.packet import ipv4
 from ryu.lib.packet import arp
 from ryu.ofproto import ether
-from ryu.ofproto import ofproto_v1_0, ofproto_v1_3
 from ryu.lib import dpid as dpid_lib
 from ryu.lib.packet.lldp import LLDP_MAC_NEAREST_BRIDGE
 from ryu.lib import hub
-import os.path
 import shutil
 
 

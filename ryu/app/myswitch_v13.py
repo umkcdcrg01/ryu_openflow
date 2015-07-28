@@ -1,26 +1,13 @@
-# Copyright (C) 2011 Nippon Telegraph and Telephone Corporation.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-# implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# Simple switch V11 for topology 2
+# Simple switch V13 for topology 2
 # Jack Zhao
 # s.zhao.j@gmail.com#
-# szb53@h4:~/ryu/ryu/app$ ryu-manager --observe-links my_switch_v12_topo_2.py
-#               my_arp_v4_topo_2.py my_monitor_v4_topo_2.py host_tracker_topo_2.py gui_topology/gui_topology.py iperf_controller_v1.py
+# szb53@h4:~/ryu/ryu/app$
+#       ryu-manager --observe-links myswitch_v13.py
+#               myarp_v5.py trafficMonitor_v5.py host_tracker_topo_2.py gui_topology/gui_topology.py iperfController_v2.py  icmpTrafficController_V1
 # How to run:
 # issue: Web http://192.1.242.160:8080 does not show any topology
 # add more match field for ICMP package
-# ICMP match: 
+# ICMP match:
 #   match = parser.OFPMatch(in_port=in_port, eth_dst=dst, eth_type=0x0800, ipv4_src=src_ip,
 #                                                   ipv4_dst=dst_ip, ip_proto=1)
 #
@@ -33,25 +20,22 @@ from ryu.controller.handler import CONFIG_DISPATCHER, \
 from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3
 from ryu.lib.packet import packet
-from ryu.lib.packet import ethernet, ipv4, icmp, arp
-from ryu.ofproto import inet
+from ryu.lib.packet import ethernet, ipv4, icmp
 from ryu.controller import dpset
 from ryu.lib.packet.lldp import LLDP_MAC_NEAREST_BRIDGE
 # from ryu.lib.packet.ether_types import ETH_TYPE_LLDP
-import array
 from ryu.lib import hub
-from operator import attrgetter
-import json
 import shutil
 import os
 import subprocess
 import time
 import networkx as nx
 from ryu.topology.api import get_switch, get_link
-from ryu.topology import event, switches
+from ryu.topology import event
 import pickle
 from ryu import utils
 import traceback
+
 # from ryu.app.wsgi import ControllerBase, WSGIApplication, route
 
 # output ovs switch hostname and DPID pairs
@@ -80,9 +64,12 @@ OFP_LINK_PORT = './network-data2/ofp_link_port.db'
 OFP_HOST_SWITCHES_LIST = './network-data2/ofp_host_switches_list.db'  # upadate by host_tracker.py
 OFP_HOST_SWITCHES_LIST_BACK = \
     './network-data2/ofp_host_switches_list_backup.db'
+OFP_ICMP_LOG = \
+    './network-data2/ofp_icmp_log.db'
+
 
 ICMP_PRIORITY = 3
-
+ICMP_TRACK_LIST_LIMIT = 1
 
 class SimpleSwitch13(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
@@ -108,6 +95,8 @@ class SimpleSwitch13(app_manager.RyuApp):
         self.link_port = {}
         # save OVS datapath Object for later reference
         self.dpid_datapathObj = {}
+        self.icmp_count = 0
+        self.icmp_track_list = {}
         # self._update_switch_dpid_list()
 
     # Given DPID, output hostname in string
@@ -258,6 +247,7 @@ class SimpleSwitch13(app_manager.RyuApp):
 
         # processing icmp packet only
         if pkt_icmp and pkt_icmp.type == icmp.ICMP_ECHO_REQUEST:
+            # increment icmp_count
             print "\nICMP From %s src_mac %s dst_mac %s" % (self._hostname_Check(datapath.id), src, dst)
             src_ip = pkt_ipv4.src
             dst_ip = pkt_ipv4.dst
@@ -271,13 +261,27 @@ class SimpleSwitch13(app_manager.RyuApp):
                 # print "\tfound shortest Path list", shortest_path_list
                 print "\tfound shortest Path list", [self._hostname_Check(path) for path in shortest_path_list]
 
-            self.logger.info("Starts to installation flows")
+            self.logger.info("\tWrite to ICMP Log")
+            final_named_list= ""
+            if len(self.icmp_track_list.keys()) < ICMP_TRACK_LIST_LIMIT:
+                self.icmp_track_list[(src, dst)] = shortest_path_list
+            elif(src, dst) not in self.icmp_track_list.keys():
+                self.icmp_track_list = {}
+                self.icmp_track_list[(src, dst)] = shortest_path_list
+            with open(OFP_ICMP_LOG, 'w') as inp:
+                for key in self.icmp_track_list.keys():
+                    shortest_path_name_list = [self._hostname_Check(i) for i in self.icmp_track_list[key]]
+                    # self.logger.info("\t!!!!!!!!!!!!shortest_path_name_list  %s %s" % (shortest_path_name_list, type(shortest_path_name_list)))
+                for i in shortest_path_name_list:
+                    final_named_list = final_named_list + " " + i
+                inp.write("%s %s" % (key, final_named_list))
 
             count = 0
+            self.logger.info("\tStarts to installation flows")
             # origin_in_port = in_port
             if len(shortest_path_list) == 1:
                 # if hosts are belong to the same switch
-                print "\tbelong to same switch"
+                print "\tBelong to same switch"
                 next_node = shortest_path_list[0]
                 next_datapath = self.dpid_datapathObj[next_node]
                 self.logger.info("\tnext_node: %s" % next_node)
@@ -379,9 +383,9 @@ class SimpleSwitch13(app_manager.RyuApp):
                         datapath.send_msg(out)
                         break
 
-                out = parser.OFPPacketOut(datapath=next_datapath, buffer_id=msg.buffer_id,
-                                          in_port=in_port, actions=actions, data=data)
-                datapath.send_msg(out)
+                        out = parser.OFPPacketOut(datapath=next_datapath, buffer_id=msg.buffer_id,
+                                                  in_port=in_port, actions=actions, data=data)
+                        datapath.send_msg(out)
 
     ###################################################################
     # Get output port
@@ -437,7 +441,7 @@ class SimpleSwitch13(app_manager.RyuApp):
             count = 1
             while dst_dpid == None:
                 self.logger.info("\t No Luck for the %d time, keep searching..." % count)
-                if count <= 20:
+                if count <= 10:
                     print "\t retry"
                     time.sleep(2)
                     count += 1
@@ -543,11 +547,11 @@ class SimpleSwitch13(app_manager.RyuApp):
     # write mac_to_port in every 10s
     ####################################################################
     def _mac_to_port(self):
-        self.logger.info("MySwitch: _mac_to_port updating")
+        self.logger.debug("MySwitch: _mac_to_port updating")
         # print "mac_to_port: OVS_name(dpid): {src_mac: in_port}"
         self.logger.debug("MySwitch: mac_to_port Update every 10s   mac_to_port: OVS_name(dpid): {src_mac: in_port}")
-        for key, value in self.mac_to_port.items():
-            self.logger.info("\t %s %s %s " % (self._hostname_Check(int(key, 16)), key, value))
+        # for key, value in self.mac_to_port.items():
+        #     self.logger.info("\t %s %s %s " % (self._hostname_Check(int(key, 16)), key, value))
 
         with open(OFP_MAC_TO_PORT, 'w') as outp:
             # outp.write("hello")
@@ -573,7 +577,7 @@ class SimpleSwitch13(app_manager.RyuApp):
     ####################################################################
     @set_ev_cls(event.EventSwitchEnter)
     def get_topology_data(self, ev):
-        self.logger.info("get_topology_data()")
+        self.logger.debug("get_topology_data()")
         self._update_switch_dpid_list()
         switch_list = get_switch(self.topology_data_app, None)
         switches = [switch.dp.id for switch in switch_list]

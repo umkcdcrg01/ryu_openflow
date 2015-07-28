@@ -2,37 +2,28 @@
 #  Shuai Jack Zhao
 # Iperf Match filed
 # in_port=int(inport), eth_dst=dst_mac, eth_src=src_mac, eth_type=0x0800, ipv4_src=src_ip,
-#                                                                               ipv4_dst=dst_ip, ip_proto=6, tcp_dst=tcp_dst_port, tcp_src=tcp_src_port
+#                                                                               ipv4_dst=dst_ip, ip_proto=6, tcp_dst=dst_port, tcp_src=src_port
 #
 #
-#
+# updated install_flow_between_switches functions
+# update UDP traffic function
+
 from ryu.base import app_manager
 from ryu.controller import ofp_event
-from ryu.controller.handler import CONFIG_DISPATCHER, \
-    MAIN_DISPATCHER, DEAD_DISPATCHER, HANDSHAKE_DISPATCHER
+from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3
 from ryu.lib.packet import packet
-from ryu.lib.packet import ethernet, ipv4, icmp, arp, tcp, udp
-from ryu.ofproto import inet
+from ryu.lib.packet import ethernet, ipv4, arp, tcp, udp
 from ryu.controller import dpset
 from ryu.lib.packet.lldp import LLDP_MAC_NEAREST_BRIDGE
 # from ryu.lib.packet.ether_types import ETH_TYPE_LLDP
-import array
-from ryu.lib import hub
-from operator import attrgetter
-import json
-import shutil
 import os
-import subprocess
 import time
-import networkx as nx
-from ryu.topology.api import get_switch, get_link
-from ryu.topology import event, switches
 import pickle
-from ryu import utils
-import traceback
-import my_switch_v11_topo_2
+
+
+# import myswitch_v13
 # from ryu.app.wsgi import ControllerBase, WSGIApplication, route
 
 # output ovs switch hostname and DPID pairs
@@ -53,13 +44,16 @@ OFP_SINGLE_SHOREST_PATH = './network-data2/ofp_single_shortest_path.db'
 OFP_ALL_PAIRS_SHOREST_PATH = './network-data2/ofp_all_pairs_shortest_path.db'
 OFP_ALL_SIMPLE_PATH = './network-data2/ofp_all_simple_path.db'
 OFP_ALL_PATHS_SHOREST_PATH = './network-data2/ofp_all_paths_shortest_path.db'
-
+OFP_IPERF_LOG = \
+    './network-data2/ofp_iperf_log.db'
 
 ICMP_PRIORITY = 3
 IPERF_PRIORITY = 4
 IDLE_TIMER = 120
 HARD_TIMER = 0
 IPERF_KEY_LEARNING_TIMER = 15
+IPERF_TRACK_LIMIT = 1
+
 
 class IperfController(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
@@ -77,6 +71,7 @@ class IperfController(app_manager.RyuApp):
         self.hostname_list = {}
         self.dpid_datapathObj = {}
         self.iperf_learning = {}
+        self.iperf_track_list = {}
         # self._update_switch_dpid_list()
 
     # Given DPID, output hostname in string
@@ -182,7 +177,8 @@ class IperfController(app_manager.RyuApp):
         #     self.logger.info("\tIPV4_packet: at %s %s " % (self._hostname_Check(datapath.id), pkt_ipv4))
 
         pkt_tcp = pkt.get_protocol(tcp.tcp)
-        if pkt_tcp:
+        pkt_udp = pkt.get_protocol(udp.udp)
+        if pkt_tcp or pkt_udp:
             # self.logger.info("\tTCP_packet: at %s %s " % (self._hostname_Check(datapath.id), pkt_tcp))
             pkt_ipv4 = pkt.get_protocol(ipv4.ipv4)
             src_ip = pkt_ipv4.src
@@ -190,15 +186,24 @@ class IperfController(app_manager.RyuApp):
             in_port = msg.match['in_port']
             src_mac = eth.src
             # parser = datapath.ofproto_parser
-            tcp_src_port = pkt_tcp.src_port
-            tcp_dst_port = pkt_tcp.dst_port
+            if pkt_tcp:
+                src_port = pkt_tcp.src_port
+                dst_port = pkt_tcp.dst_port
+            if pkt_udp:
+                src_port = pkt_udp.src_port
+                dst_port = pkt_udp.dst_port
+
             self.logger.debug("IperfController: Packet-In:")
+
             self.logger.info("\tAt %s from %s to %s from src_port %s to dst_port %s from  port %s src_mac %s dst_mac %s" %
-                             (self._hostname_Check(datapath.id), src_ip, dst_ip, tcp_src_port, tcp_dst_port, in_port, src_mac, dst_mac))
-            if str(tcp_dst_port) == '5001':
-                key = (src_ip, dst_ip, src_mac, dst_mac, tcp_dst_port)
+                             (self._hostname_Check(datapath.id), src_ip, dst_ip, src_port, dst_port, in_port, src_mac, dst_mac))
+            if str(dst_port) == '5001':
+                key = (src_ip, dst_ip, src_mac, dst_mac, dst_port)
                 if key not in self.iperf_learning.keys():
-                    self.logger.info("\t##################################")
+                    if pkt_tcp:
+                        self.logger.info("\t############# TCP Iperf Traffic#####################")
+                    if pkt_udp:
+                        self.logger.info("\t############# UDP Iperf Traffic#####################")
                     self.logger.debug("\tOnly process the first IPERF client request")
                     self.logger.info("\tThis is a new Iperf client request!! Added to self.iperf_learning dict")
                     # if self.iperf_learning is empty
@@ -208,7 +213,7 @@ class IperfController(app_manager.RyuApp):
                     self.iperf_learning[key] = value
                 elif key in self.iperf_learning.keys():
                     if time.time() - self.iperf_learning[key] >= IPERF_KEY_LEARNING_TIMER:
-                        self.logger.info("\t(src_ip, dst_ip, src_mac, dst_mac, tcp_dst_port, in_port) TIMEOUT from self.iperf_learning dict!!!")
+                        self.logger.info("\t(src_ip, dst_ip, src_mac, dst_mac, dst_port, in_port) TIMEOUT from self.iperf_learning dict!!!")
                         del self.iperf_learning[key]
                         self.iperf_learning[key] = time.time()
                     else:
@@ -231,16 +236,40 @@ class IperfController(app_manager.RyuApp):
                 # find shortest path between two switches, a list of hostnames ['s1','s2','s3']
                 shortest_path = self.return_shortest_path(src_dpid_name, dst_dpid_name)
 
+                self.logger.info("\tWrite to IPERF Log")
+                final_named_list = ""
+                if len(self.iperf_track_list.keys()) < IPERF_TRACK_LIMIT:
+                    self.iperf_track_list[(src_mac, dst_mac, src_ip, dst_ip, src_port, dst_port)] = shortest_path
+                elif(src_mac, dst_mac, src_ip, dst_ip, src_port, dst_port) not in self.iperf_track_list.keys():
+                    self.iperf_track_list = {}
+                    self.iperf_track_list[(src_mac, dst_mac, src_ip, dst_ip, src_port, dst_port)] = shortest_path
+                with open(OFP_IPERF_LOG, 'w') as inp:
+                    for key in self.iperf_track_list.keys():
+                        shortest_path_name_list = [self._hostname_Check(i) for i in shortest_path]
+                    for i in shortest_path_name_list:
+                        final_named_list = final_named_list + " " + i
+                    inp.write("%s %s" % (key, final_named_list))
+
                 # install flows between hosts and switch
                 count = 0
                 for h_mac in hosts:
                     if count < len(hosts) and count == 0:
-                        self.install_flow_between_host_and_switch(
-                            h_mac, shortest_path[count:count + 2], count, src_ip, dst_ip, tcp_src_port, tcp_dst_port, src_mac, dst_mac, msg)
+                        if pkt_tcp:
+                            self.install_flow_between_host_and_switch(
+                                h_mac, 'TCP', shortest_path[count:count + 2], count, src_ip, dst_ip, src_port, dst_port, src_mac, dst_mac, msg)
+                        if pkt_udp:
+                            self.install_flow_between_host_and_switch(
+                                h_mac, 'UDP', shortest_path[count:count + 2], count, src_ip, dst_ip, src_port, dst_port, src_mac, dst_mac, msg)
                         count += 1
                     elif count < len(hosts) and count == 1:
-                        self.install_flow_between_host_and_switch(
-                            h_mac, list([shortest_path[len(shortest_path) - 1], shortest_path[len(shortest_path) - 2]]), count, src_ip, dst_ip, tcp_src_port, tcp_dst_port, src_mac, dst_mac, msg)
+                        if pkt_tcp:
+                            self.install_flow_between_host_and_switch(
+                                h_mac, 'TCP', list([shortest_path[len(shortest_path) - 1], shortest_path[len(shortest_path) - 2]]),
+                                count, src_ip, dst_ip, src_port, dst_port, src_mac, dst_mac, msg)
+                        if pkt_udp:
+                            self.install_flow_between_host_and_switch(
+                                h_mac, 'UDP', list([shortest_path[len(shortest_path) - 1], shortest_path[len(shortest_path) - 2]]),
+                                count, src_ip, dst_ip, src_port, dst_port, src_mac, dst_mac, msg)
                         count += 1
 
                 # install flows between shortest_path
@@ -251,20 +280,21 @@ class IperfController(app_manager.RyuApp):
                             src_dpid_obj = shortest_path[index]
                             index += 1
                             dst_dpi_obj = shortest_path[index]
-                            self.install_flow_between_switches(src_dpid_obj, dst_dpi_obj, src_ip, dst_ip, tcp_src_port, tcp_dst_port, in_port, src_mac, dst_mac, msg)
+                            self.install_flow_between_switches(src_dpid_obj, dst_dpi_obj, src_ip, dst_ip, src_port, dst_port, in_port, src_mac, dst_mac, msg)
 
         # pkt_udp = pkt.get_protocol(udp.udp)
         # if pkt_udp:
         # self.logger.info("##########################")
         #     self.logger.info("\tUDP_packet: at %s %s " % (self._hostname_Check(datapath.id), pkt_udp))
-    def install_flow_between_switches(self, switch1, switch2, src_ip, dst_ip, tcp_src_port, tcp_dst_port, in_port, src_mac, dst_mac, msg):
+
+    def install_flow_between_switches(self, switch1, switch2, src_ip, dst_ip, src_port, dst_port, in_port, src_mac, dst_mac, msg):
         # input switch1 and switch2 are string: 's1', 's2'
         # self.logger.info("Install Flow from %s to %s" % (switch1, switch2))
         # connection_port = self.return_switch_connection_port(switch1, switch2)
         self.logger.info("HAVE NOT INPLMENETED when shortest_path is longer than 2!!!!!!!!")
         pass
 
-    def install_flow_between_host_and_switch(self, h_mac, shorestPath, host_position, src_ip, dst_ip, tcp_src_port, tcp_dst_port, src_mac, dst_mac, msg):
+    def install_flow_between_host_and_switch(self, h_mac, traffic_mode, shorestPath, host_position, src_ip, dst_ip, src_port, dst_port, src_mac, dst_mac, msg):
         self.logger.info("> IperfController: Install flows between host and switch")
         # 192.168.1.25 0000ae7e24cd5e40 2 02:63:ff:a5:b1:0f
         # first found out which switch does this host attach to
@@ -275,15 +305,23 @@ class IperfController(app_manager.RyuApp):
                     self.logger.info("\tFound attached switch at %s for mac %s" % (self._hostname_Check(int(str(dpid), 16)), h_mac))
 
                     datapath_obj = self.dpid_datapathObj[int(str(dpid), 16)]
-                    self.logger.info("\t%s %s %s %s %s %s %s" % (type(inport), type(dst_mac), type(src_mac), type(src_ip), type(dst_ip), type(tcp_src_port), type(tcp_dst_port)))
+                    self.logger.info("\t%s %s %s %s %s %s %s" % (type(inport), type(dst_mac), type(src_mac), type(src_ip), type(dst_ip), type(src_port), type(dst_port)))
                     # match_to_switch = datapath_obj.ofproto_parser.OFPMatch(in_port=int(inport), eth_dst=dst_mac, eth_src=src_mac, ipv4_src=src_ip,
-                    #                                                        ipv4_dst=dst_ip, tcp_src=tcp_src_port, tcp_dst=tcp_dst_port)
+                    #                                                        ipv4_dst=dst_ip, tcp_src=src_port, tcp_dst=dst_port)
                     if host_position == 0:
-                        match_to_switch = datapath_obj.ofproto_parser.OFPMatch(in_port=int(inport), eth_dst=dst_mac, eth_src=src_mac, eth_type=0x0800, ipv4_src=src_ip,
-                                                                               ipv4_dst=dst_ip, ip_proto=6, tcp_dst=tcp_dst_port, tcp_src=tcp_src_port)
+                        if traffic_mode == 'TCP':
+                            match_to_switch = datapath_obj.ofproto_parser.OFPMatch(in_port=int(inport), eth_dst=dst_mac, eth_src=src_mac, eth_type=0x0800, ipv4_src=src_ip,
+                                                                                   ipv4_dst=dst_ip, ip_proto=6, tcp_dst=dst_port, tcp_src=src_port)
+                        if traffic_mode == 'UDP':
+                            match_to_switch = datapath_obj.ofproto_parser.OFPMatch(in_port=int(inport), eth_dst=dst_mac, eth_src=src_mac, eth_type=0x0800, ipv4_src=src_ip,
+                                                                                   ipv4_dst=dst_ip, ip_proto=17, udp_dst=dst_port, udp_src=src_port)
                     elif host_position == 1:
-                        match_to_switch = datapath_obj.ofproto_parser.OFPMatch(in_port=int(inport), eth_dst=src_mac, eth_src=dst_mac, eth_type=0x0800, ipv4_src=dst_ip,
-                                                                               ipv4_dst=src_ip, ip_proto=6, tcp_dst=tcp_src_port, tcp_src=tcp_dst_port)
+                        if traffic_mode == 'TCP':
+                            match_to_switch = datapath_obj.ofproto_parser.OFPMatch(in_port=int(inport), eth_dst=src_mac, eth_src=dst_mac, eth_type=0x0800, ipv4_src=dst_ip,
+                                                                                   ipv4_dst=src_ip, ip_proto=6, tcp_dst=src_port, tcp_src=dst_port)
+                        if traffic_mode == 'UDP':
+                            match_to_switch = datapath_obj.ofproto_parser.OFPMatch(in_port=int(inport), eth_dst=src_mac, eth_src=dst_mac, eth_type=0x0800, ipv4_src=dst_ip,
+                                                                                   ipv4_dst=src_ip, ip_proto=17, udp_dst=src_port, udp_src=dst_port)
 
                     # found out output port
                     output_port = int(self.return_switch_connection_port(shorestPath[0], shorestPath[1]))
@@ -295,13 +333,21 @@ class IperfController(app_manager.RyuApp):
                         self.add_flow(datapath_obj, IPERF_PRIORITY, match_to_switch, actions)
 
                     # match_to_host = datapath_obj.ofproto_parser.OFPMatch(in_port=output_port, eth_dst=src_mac, eth_src=dst_mac, ipv4_src=dst_ip,
-                    #                                                      ipv4_dst=src_ip, tcp_src=tcp_dst_port, tcp_dst=tcp_src_port)
+                    #                                                      ipv4_dst=src_ip, tcp_src=dst_port, tcp_dst=src_port)
                     if host_position == 0:
-                        match_to_host = datapath_obj.ofproto_parser.OFPMatch(in_port=output_port, eth_dst=src_mac, eth_src=dst_mac, eth_type=0x0800, ipv4_src=dst_ip,
-                                                                             ipv4_dst=src_ip, ip_proto=6, tcp_src=tcp_dst_port, tcp_dst=tcp_src_port)
+                        if traffic_mode == 'TCP':
+                            match_to_host = datapath_obj.ofproto_parser.OFPMatch(in_port=output_port, eth_dst=src_mac, eth_src=dst_mac, eth_type=0x0800, ipv4_src=dst_ip,
+                                                                                 ipv4_dst=src_ip, ip_proto=6, tcp_src=dst_port, tcp_dst=src_port)
+                        if traffic_mode == 'UDP':
+                            match_to_host = datapath_obj.ofproto_parser.OFPMatch(in_port=output_port, eth_dst=src_mac, eth_src=dst_mac, eth_type=0x0800, ipv4_src=dst_ip,
+                                                                                 ipv4_dst=src_ip, ip_proto=17, udp_src=dst_port, udp_dst=src_port)
                     elif host_position == 1:
-                        match_to_host = datapath_obj.ofproto_parser.OFPMatch(in_port=output_port, eth_dst=dst_mac, eth_src=src_mac, eth_type=0x0800, ipv4_src=src_ip,
-                                                                             ipv4_dst=dst_ip, ip_proto=6, tcp_src=tcp_src_port, tcp_dst=tcp_dst_port)
+                        if traffic_mode == 'TCP':
+                            match_to_host = datapath_obj.ofproto_parser.OFPMatch(in_port=output_port, eth_dst=dst_mac, eth_src=src_mac, eth_type=0x0800, ipv4_src=src_ip,
+                                                                                 ipv4_dst=dst_ip, ip_proto=6, tcp_src=src_port, tcp_dst=dst_port)
+                        if traffic_mode == 'UDP':
+                            match_to_host = datapath_obj.ofproto_parser.OFPMatch(in_port=output_port, eth_dst=dst_mac, eth_src=src_mac, eth_type=0x0800, ipv4_src=src_ip,
+                                                                                 ipv4_dst=dst_ip, ip_proto=17, udp_src=src_port, udp_dst=dst_port)
 
                     reverse_actions = [datapath_obj.ofproto_parser.OFPActionOutput(int(inport))]
                     self.logger.info("\tInstall reserse Flow from %s to %s inport=%s output_port=%s" % (self._hostname_Check(int(str(dpid), 16)), h_mac, output_port, inport))
@@ -342,7 +388,7 @@ class IperfController(app_manager.RyuApp):
         return connection_port
 
     def return_dst_dpid_hostname(self, dst_ip, dst_mac):
-        # return destination switch's name based on given HOST's destination IP and mac address
+        # return destination switch's name (ex 'S1') based on given HOST's destination IP and mac address
         self.logger.debug("return dstination DPID as Hostname")
         dst_dpid_name = None
         # self.logger.info("\tsleeping for another 10 s .......................")
