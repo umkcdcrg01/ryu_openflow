@@ -111,15 +111,15 @@ class IperfController(app_manager.RyuApp):
         # ofproto = datapath.ofproto
         # parser = datapath.ofproto_parser
 
-        self.logger.info(
-            "   datapath in decimal %s,in hex %s",
-            datapath.id, hex(int(datapath.id)))
-        self.logger.info('   OFPSwitchFeatures received: '
-                         'datapath_id=0x%016x n_buffers=%d '
-                         'n_tables=%d auxiliary_id=%d '
-                         'capabilities=0x%08x',
-                         msg.datapath_id, msg.n_buffers, msg.n_tables,
-                         msg.auxiliary_id, msg.capabilities)
+        # self.logger.info(
+        #     "   datapath in decimal %s,in hex %s",
+        #     datapath.id, hex(int(datapath.id)))
+        # self.logger.info('   OFPSwitchFeatures received: '
+        #                  'datapath_id=0x%016x n_buffers=%d '
+        #                  'n_tables=%d auxiliary_id=%d '
+        #                  'capabilities=0x%08x',
+        #                  msg.datapath_id, msg.n_buffers, msg.n_tables,
+        #                  msg.auxiliary_id, msg.capabilities)
 
     ###################################################################
     # add flow
@@ -389,7 +389,7 @@ class IperfController(app_manager.RyuApp):
 
     def return_dst_dpid_hostname(self, dst_ip, dst_mac):
         # return destination switch's name (ex 'S1') based on given HOST's destination IP and mac address
-        self.logger.debug("return dstination DPID as Hostname")
+        self.logger.info("return dstination DPID as Hostname")
         dst_dpid_name = None
         # self.logger.info("\tsleeping for another 10 s .......................")
         with open(OFP_HOST_SWITCHES_LIST, 'r') as inp:

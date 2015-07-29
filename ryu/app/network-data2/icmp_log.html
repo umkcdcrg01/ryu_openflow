@@ -97,16 +97,16 @@
       });
     }
 
-    function start2() {
-        $(document).ready(function(){
-            $.get('ofp_icmp_reroute_log.db', function(data) {
-                $('#icmp-id-reroute').empty();
-                //var lines = data.replace(/ /g, '          ');
-                var lines = data.replace(/\n/g,'</br>');    
-                $('#icmp-id-reroute').html(lines);
-               });
-      });
-    }
+    // function start2() {
+    //     $(document).ready(function(){
+    //         $.get('ofp_icmp_reroute_log.db', function(data) {
+    //             $('#icmp-id-reroute').empty();
+    //             //var lines = data.replace(/ /g, '          ');
+    //             var lines = data.replace(/\n/g,'</br>');    
+    //             $('#icmp-id-reroute').html(lines);
+    //            });
+    //   });
+    // }
 
     function start3() {
         $(document).ready(function(){
@@ -120,7 +120,7 @@
     }
 
         setInterval('start1()', 1000);
-        setInterval('start2()', 1000);
+        // setInterval('start2()', 1000);
         setInterval('start3()', 1000);
 
 
