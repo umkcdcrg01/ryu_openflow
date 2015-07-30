@@ -3,6 +3,7 @@
 
 import os
 import time
+from ryu.ofproto import ofproto_v1_3
 
 # from ryu.app.wsgi import ControllerBase, WSGIApplication, route
 
@@ -26,10 +27,14 @@ OFP_ALL_SIMPLE_PATH = './network-data2/ofp_all_simple_path.db'
 OFP_ALL_PATHS_SHOREST_PATH = './network-data2/ofp_all_paths_shortest_path.db'
 OFP_IPERF_LOG = \
     './network-data2/ofp_iperf_log.db'
+OFP_SWITCH_FLOWS_LIST_DETAILS = \
+    './network-data2/ofp_switches_{0}_flow_details.db'
+
 
 ICMP_PRIORITY = 3
 IPERF_PRIORITY = 4
-IDLE_TIMER = 120
+ICMP_IDLE_TIMER = 60
+ICMP_REROUTE_IDLE_TIME = 70
 HARD_TIMER = 0
 IPERF_KEY_LEARNING_TIMER = 15
 IPERF_TRACK_LIMIT = 1
@@ -72,7 +77,7 @@ class Utilites():
     ###################################################################
     # add flow
     ####################################################################
-    def add_flow(self, datapath, priority, match, actions, buffer_id=None):
+    def add_flow(self, datapath, priority, match, actions, idle_timer, hard_timer, buffer_id=None):
         print("UtilityLib: add flow to %s %d" % (self.hostname_Check(datapath.id), datapath.id))
         # print type(datapath)
         ofproto = datapath.ofproto
@@ -82,13 +87,24 @@ class Utilites():
                                              actions)]
         if buffer_id:
             mod = parser.OFPFlowMod(datapath=datapath, buffer_id=buffer_id,
-                                    priority=priority, match=match, idle_timeout=IDLE_TIMER, hard_timeout=HARD_TIMER,
+                                    priority=priority, match=match, idle_timeout=idle_timer, hard_timeout=hard_timer,
                                     instructions=inst)
         else:
             mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
-                                    match=match, idle_timeout=IDLE_TIMER, hard_timeout=HARD_TIMER, instructions=inst)
+                                    match=match, idle_timeout=idle_timer, hard_timeout=hard_timer, instructions=inst)
         datapath.send_msg(mod)
         print("\tFlow installed!!!!!!!!!")
+
+    def del_flow(self, datapath, priority, match, actions, idle_timer, hard_timer, output_port):
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,
+                                             actions)]
+        mod = parser.OFPFlowMod(datapath=datapath, priority=priority, command=datapath.ofproto.OFPFC_DELETE_STRICT,
+                                out_group=datapath.ofproto.OFPP_ANY, out_port=output_port,
+                                match=match, idle_timeout=idle_timer, hard_timeout=hard_timer, instructions=inst)
+        datapath.send_msg(mod)
 
     def install_flow_between_switches(self, switch1, switch2, src_ip, dst_ip, src_port, dst_port, in_port, src_mac, dst_mac, msg):
         # input switch1 and switch2 are string: 's1', 's2'
@@ -131,9 +147,9 @@ class Utilites():
                     actions = [datapath_obj.ofproto_parser.OFPActionOutput(output_port)]
                     print("\tInstall Flow from %s to %s inport=%s output_port=%s" % (h_mac, self.hostname_Check(int(str(dpid), 16)), inport, output_port))
                     if msg.buffer_id != datapath_obj.ofproto.OFP_NO_BUFFER:
-                        self.add_flow(datapath_obj, IPERF_PRIORITY, match_to_switch, actions, msg.buffer_id)
+                        self.add_flow(datapath_obj, IPERF_PRIORITY, match_to_switch, actions, ICMP_IDLE_TIMER, HARD_TIMER, msg.buffer_id)
                     else:
-                        self.add_flow(datapath_obj, IPERF_PRIORITY, match_to_switch, actions)
+                        self.add_flow(datapath_obj, IPERF_PRIORITY, match_to_switch, actions, ICMP_IDLE_TIMER, HARD_TIMER)
 
                     # match_to_host = datapath_obj.ofproto_parser.OFPMatch(in_port=output_port, eth_dst=src_mac, eth_src=dst_mac, ipv4_src=dst_ip,
                     #                                                      ipv4_dst=src_ip, tcp_src=dst_port, tcp_dst=src_port)
@@ -155,9 +171,9 @@ class Utilites():
                     reverse_actions = [datapath_obj.ofproto_parser.OFPActionOutput(int(inport))]
                     print("\tInstall reserse Flow from %s to %s inport=%s output_port=%s" % (self.hostname_Check(int(str(dpid), 16)), h_mac, output_port, inport))
                     if msg.buffer_id != datapath_obj.ofproto.OFP_NO_BUFFER:
-                        self.add_flow(datapath_obj, IPERF_PRIORITY, match_to_host, reverse_actions, msg.buffer_id)
+                        self.add_flow(datapath_obj, IPERF_PRIORITY, match_to_host, reverse_actions, ICMP_IDLE_TIMER, HARD_TIMER, msg.buffer_id)
                     else:
-                        self.add_flow(datapath_obj, IPERF_PRIORITY, match_to_host, reverse_actions)
+                        self.add_flow(datapath_obj, IPERF_PRIORITY, match_to_host, reverse_actions, ICMP_IDLE_TIMER, HARD_TIMER)
 
                     out = datapath_obj.ofproto_parser.OFPPacketOut(datapath=datapath_obj, buffer_id=0xffffffff,
                                                                    in_port=int(inport), actions=actions, data=msg.data)
@@ -239,4 +255,20 @@ class Utilites():
                     print("\tshortestPath: %s" % shortest_path)
                     all_shortestPaths.append(shortest_path)
         return all_shortestPaths
-    
+
+    def return_flows_info_based_on_switch_name(self, switchName, traffic_mode, priority):
+        print("Utilites: return_flows_based_on_switch_name:")
+        flow_info = []
+        if traffic_mode == "ICMP" and priority == ICMP_PRIORITY:
+            print("\tICMP Traffic")
+            with open(OFP_SWITCH_FLOWS_LIST_DETAILS.format(switchName), 'r') as outp:
+                for line in outp:
+                    in_port, src_mac, dst_mac, ip_proto, idle_timeout, src_ip, dst_ip, output_port, priority =\
+                        line.split()[1], line.split()[2], line.split()[3], line.split()[4],\
+                        line.split()[5], line.split()[6], line.split()[7], line.split()[8], line.split()[9]
+                    if int(idle_timeout) == ICMP_IDLE_TIMER:
+                        flow_info.append([in_port, src_mac, dst_mac, ip_proto, idle_timeout, src_ip, dst_ip, output_port, priority])
+        return flow_info
+
+    def delete_flow_along_path(self, path):
+        pass

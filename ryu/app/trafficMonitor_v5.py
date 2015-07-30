@@ -12,6 +12,7 @@ from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
 import os.path
 import os
+from ryu.ofproto import ofproto_v1_3
 # from my_switch_v11_topo_2 import SimpleSwitch13
 
 OFP_SWITCHES_FLOW_STATS = \
@@ -26,7 +27,8 @@ OFP_SWITCHES_LIST_PREVIOUS = \
     './network-data2/ofp_switches_list_prev.db'
 OFP_SWITCHES_LIST = \
     './network-data2/ofp_switches_list.db'
-
+OFP_SWITCH_FLOWS_LIST_DETAILS = \
+    './network-data2/ofp_switches_{0}_flow_details.db'
 
 ICMP_PRIORITY = 3
 IPERF_PRIORITY = 4
@@ -122,7 +124,7 @@ class MySimpleMonitor(app_manager.RyuApp):
         speed = (now - pre) / period
         if speed < 0:
             # check if the speed is negative
-            self.logger.info("\t!!!!!!!!!!!!Flow stats dictionary %s !!!!!!!!!!!!!!!!" % self.flow_stats)
+            self.logger.info("\t!!!!!!!!!!!!Flow stats dictionary Negative speed %s !!!!!!!!!!!!!!!!" % self.flow_stats)
         return speed
 
     def _get_time(self, sec, nsec):
@@ -141,9 +143,11 @@ class MySimpleMonitor(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_handler(self, ev):
-        self.logger.debug("simple_monitor.flow_stats:")
+        self.logger.info("simple_monitor.flow_stats:")
         body = ev.msg.body
         dpid = ev.msg.datapath.id
+        self.logger.debug("\t%s\n\t%s" % (type(body), body))
+
         # self.logger.info("\tSwitch Flow States Msg reply Details")
         # for entry in ev.msg.body:
         #     if type(entry) == {}:
@@ -153,117 +157,127 @@ class MySimpleMonitor(app_manager.RyuApp):
 
         switch_name = self._hostname_Check(ev.msg.datapath.id)
 
-        with open(OFP_SWITCHES_FLOW_STATS.format(switch_name), 'w') as iff:
-            # print "writing to %s" % (os.path.abspath(OFP_SWITCHES_FLOW_STATS.format(switch_name)))
-            self.logger.debug("\n> Flow Stats:")
-            self.logger.debug('datapath         '
-                              'hostname   '
-                              'in-port       duration_sec   duration_nsec       '
-                              '   eth-dst  out-port packets  bytes    speed(bits/sec)   priority')
-            self.logger.debug('---------------- '
-                              '---------- '
-                              '-------- ---------------- -------------- '
-                              '------------------- -------- -------- -------- -------------- ----')
-            iff.write('datapath         '
-                      'hostname   '
-                      'in-port       duration_sec   duration_nsec       '
-                      '      eth-dst  out-port packets  bytes    speed(bits/sec)   priority\n')
-            iff.write('---------------- '
-                      '---------- '
-                      '-------- ------------------ -------------- '
-                      '----------------------- -------- -------- -------- -------------- ----\n')
-            for stat in sorted([flow for flow in body if flow.priority == ICMP_PRIORITY or flow.priority == IPERF_PRIORITY],
-                               key=lambda flow: (flow.match['in_port'],
-                                                 flow.match['eth_dst'])):
-                # update flow stats
-                # key (dpid, in_port, dst_mac, output_port)
-                # key is a tuple
-                self.logger.debug("\t stat.match[ip_proto] = %s" % stat.match['ip_proto'])
-                if str(stat.match['ip_proto']) == str(1):  # ICMP package
-                    key = (dpid,
-                           stat.match['in_port'], stat.match['eth_dst'], stat.match['ipv4_src'], stat.match['ipv4_dst'],
-                           stat.instructions[0].actions[0].port, stat.match['ip_proto'])
-                    # self.logger.debug(key)
-                elif str(stat.match['ip_proto']) == str(6):  # IPERF TCP package:
-                    key = (dpid,
-                           stat.match['in_port'], stat.match['eth_dst'],
-                           stat.instructions[0].actions[0].port, stat.match['ip_proto'], stat.match['tcp_src'], stat.match['tcp_dst'])
-                    # self.logger.debug(key)
-                elif str(stat.match['ip_proto']) == str(17):  # IPERF UDP package:
-                    key = (dpid,
-                           stat.match['in_port'], stat.match['eth_dst'],
-                           stat.instructions[0].actions[0].port, stat.match['ip_proto'], stat.match['udp_src'], stat.match['udp_dst'])
-                    # self.logger.debug(key)
-                else:
-                    key = (dpid,
-                           stat.match['in_port'], stat.match['eth_dst'],
-                           stat.instructions[0].actions[0].port)
-                    # self.logger.debug(key)
-                # value (packet_count, byte_count, duration_sec, duration_msec)
-                # value is a tuple, It will be appended to self.flow_stats[key]
-                value = (
-                    stat.packet_count, stat.byte_count,
-                    stat.duration_sec, stat.duration_nsec)
-                self._save_stats(self.flow_stats, key, value, self.state_len)
+        with open(OFP_SWITCH_FLOWS_LIST_DETAILS.format(switch_name), 'w') as inp:
+            with open(OFP_SWITCHES_FLOW_STATS.format(switch_name), 'w') as iff:
+                # print "writing to %s" % (os.path.abspath(OFP_SWITCHES_FLOW_STATS.format(switch_name)))
+                self.logger.debug("\n> Flow Stats:")
+                self.logger.debug('datapath         '
+                                  'hostname   '
+                                  'in-port       duration_sec   duration_nsec       '
+                                  '   eth-dst  out-port packets  bytes    speed(bits/sec)   priority')
+                self.logger.debug('---------------- '
+                                  '---------- '
+                                  '-------- ---------------- -------------- '
+                                  '------------------- -------- -------- -------- -------------- ----')
+                iff.write('datapath         '
+                          'hostname   '
+                          'in-port       duration_sec   duration_nsec       '
+                          '      eth-dst  out-port packets  bytes    speed(bits/sec)   priority\n')
+                iff.write('---------------- '
+                          '---------- '
+                          '-------- ------------------ -------------- '
+                          '----------------------- -------- -------- -------- -------------- ----\n')
+                for stat in sorted([flow for flow in body if flow.priority == ICMP_PRIORITY or flow.priority == IPERF_PRIORITY],
+                                   key=lambda flow: (flow.match['in_port'],
+                                                     flow.match['eth_dst'])):
+                    # update flow stats
+                    # key (dpid, in_port, dst_mac, output_port)
+                    # key is a tuple
+                    self.logger.debug("\t stat.match[ip_proto] = %s" % stat.match['ip_proto'])
+                    if str(stat.match['ip_proto']) == str(1):  # ICMP package
+                        key = (dpid,
+                               stat.match['in_port'], stat.match['eth_dst'], stat.match['ipv4_src'], stat.match['ipv4_dst'],
+                               stat.instructions[0].actions[0].port, stat.match['ip_proto'])
+                        # self.logger.debug(key)
+                    elif str(stat.match['ip_proto']) == str(6):  # IPERF TCP package:
+                        key = (dpid,
+                               stat.match['in_port'], stat.match['eth_dst'],
+                               stat.instructions[0].actions[0].port, stat.match['ip_proto'], stat.match['tcp_src'], stat.match['tcp_dst'])
+                        # self.logger.debug(key)
+                    elif str(stat.match['ip_proto']) == str(17):  # IPERF UDP package:
+                        key = (dpid,
+                               stat.match['in_port'], stat.match['eth_dst'],
+                               stat.instructions[0].actions[0].port, stat.match['ip_proto'], stat.match['udp_src'], stat.match['udp_dst'])
+                        # self.logger.debug(key)
+                    else:
+                        key = (dpid,
+                               stat.match['in_port'], stat.match['eth_dst'],
+                               stat.instructions[0].actions[0].port)
+                        # self.logger.debug(key)
+                    # value (packet_count, byte_count, duration_sec, duration_msec)
+                    # value is a tuple, It will be appended to self.flow_stats[key]
+                    value = (
+                        stat.packet_count, stat.byte_count,
+                        stat.duration_sec, stat.duration_nsec)
+                    self._save_stats(self.flow_stats, key, value, self.state_len)
 
-                # Update this flow's speed for every 10s
-                pre = 0
-                period = self.sleep
-                tmp = self.flow_stats[key]
-                if len(tmp) > 1:
-                    # get previous flow's byte_count
-                    pre = tmp[-2][1]
-                    """
-                    # tmp[-1][2]: current flow's duration seconds
-                    # tmp[-1][3]: current flow's duration nsec
-                    # tmp[-2][2]: previous flow's duration seconds
-                    # tmp[-2][3]: previous flow's duration nseconds
-                    # period: get the time difference between two adjanct flows stats
-                    # if flow stats does change every 10s, period = 0
-                    """
-                    period = self._get_period(
-                        tmp[-1][2], tmp[-1][3],
-                        tmp[-2][2], tmp[-2][3])
-                    self.logger.debug("%s %s %s %s" %
-                                      (tmp[-1][2], tmp[-1][3], tmp[-2][2], tmp[-2][3]))
-                # key[-1][1]: current flow's byte_count
-                # speed: eacho flow's current speed (every 10s)
-                speed = self._get_speed(
-                    self.flow_stats[key][-1][1], pre, period)
+                    # Update this flow's speed for every 10s
+                    pre = 0
+                    period = self.sleep
+                    tmp = self.flow_stats[key]
+                    if len(tmp) > 1:
+                        # get previous flow's byte_count
+                        pre = tmp[-2][1]
+                        """
+                        # tmp[-1][2]: current flow's duration seconds
+                        # tmp[-1][3]: current flow's duration nsec
+                        # tmp[-2][2]: previous flow's duration seconds
+                        # tmp[-2][3]: previous flow's duration nseconds
+                        # period: get the time difference between two adjanct flows stats
+                        # if flow stats does change every 10s, period = 0
+                        """
+                        period = self._get_period(
+                            tmp[-1][2], tmp[-1][3],
+                            tmp[-2][2], tmp[-2][3])
+                        self.logger.debug("%s %s %s %s" %
+                                          (tmp[-1][2], tmp[-1][3], tmp[-2][2], tmp[-2][3]))
+                    # key[-1][1]: current flow's byte_count
+                    # speed: eacho flow's current speed (every 10s)
+                    speed = self._get_speed(
+                        self.flow_stats[key][-1][1], pre, period)
 
-                self.logger.debug("pre_byte=%s current_byte=%s  period=%s speed=%s" % (pre, self.flow_stats[key][-1][1], period, speed))
-                if speed == None:
-                    self.logger.debug("Speed == None ----------------------------------------------------------")
-                    speed = 0.0
+                    self.logger.debug("pre_byte=%s current_byte=%s  period=%s speed=%s" % (pre, self.flow_stats[key][-1][1], period, speed))
+                    if speed == None:
+                        self.logger.debug("Speed == None ----------------------------------------------------------")
+                        speed = 0.0
 
-                self._save_stats(self.flow_speed, key, speed, self.state_len)
+                    self._save_stats(self.flow_speed, key, speed, self.state_len)
 
-                iff.write('%16d %8s %8x %16d %16d %17s %8x %8d %8d %16d %10d' %
-                          (ev.msg.datapath.id,
-                           # str(ev.msg.datapath.id),
-                           self._hostname_Check(ev.msg.datapath.id),
-                           stat.match['in_port'], stat.duration_sec,
-                           stat.duration_nsec, stat.match['eth_dst'],
-                           stat.instructions[0].actions[0].port,
-                           stat.packet_count, stat.byte_count, int(speed) * 8, stat.priority))
-                iff.write("\n")
-                self.logger.debug('%16d %8s %8x %16d %16d %17s %8x %8d %8d %16d',
-                                  ev.msg.datapath.id,
-                                  # str(ev.msg.datapath.id),
-                                  self._hostname_Check(ev.msg.datapath.id),
-                                  stat.match['in_port'], stat.duration_sec,
-                                  stat.duration_nsec, stat.match['eth_dst'],
-                                  stat.instructions[0].actions[0].port,
-                                  stat.packet_count, stat.byte_count,
-                                  int(speed) * 8)
-        # print each key, value for verification
-        # self.logger.debug("flow_sttas:")
-        # for key, val in self.flow_stats.items():
-        #     self.logger.debug("  key=%s    value=%s" % (key, val))
+                    iff.write('%16d %8s %8x %16d %16d %17s %8x %8d %8d %16d %10d' %
+                              (ev.msg.datapath.id,
+                               # str(ev.msg.datapath.id),
+                               self._hostname_Check(ev.msg.datapath.id),
+                               stat.match['in_port'], stat.duration_sec,
+                               stat.duration_nsec, stat.match['eth_dst'],
+                               stat.instructions[0].actions[0].port,
+                               stat.packet_count, stat.byte_count, int(speed) * 8, stat.priority))
+                    iff.write("\n")
+                    self.logger.debug('%16d %8s %8x %16d %16d %17s %8x %8d %8d %16d',
+                                      ev.msg.datapath.id,
+                                      # str(ev.msg.datapath.id),
+                                      self._hostname_Check(ev.msg.datapath.id),
+                                      stat.match['in_port'], stat.duration_sec,
+                                      stat.duration_nsec, stat.match['eth_dst'],
+                                      stat.instructions[0].actions[0].port,
+                                      stat.packet_count, stat.byte_count,
+                                      int(speed) * 8)
+                    if stat.priority == 3 or stat.priority == 4:
+                        if stat.priority == 3:
+                            inp.write('%s %s %s %s %s %s %s %s %s %s' %
+                                      (self._hostname_Check(ev.msg.datapath.id),
+                                          stat.match['in_port'], stat.match['eth_src'], stat.match['eth_dst'],
+                                          stat.match['ip_proto'], stat.idle_timeout, stat.match['ipv4_src'], stat.match['ipv4_dst'],
+                                          stat.instructions[0].actions[0].port, stat.priority))
+                            inp.write("\n")
 
-        # self.logger.debug("flow_speed:")
-        # for key, val in self.flow_speed.items():
-        #     self.logger.debug("  key=%s    value=%s" % (key, val))
+            # print each key, value for verification
+            # self.logger.debug("flow_sttas:")
+            # for key, val in self.flow_stats.items():
+            #     self.logger.debug("  key=%s    value=%s" % (key, val))
+
+            # self.logger.debug("flow_speed:")
+            # for key, val in self.flow_speed.items():
+            #     self.logger.debug("  key=%s    value=%s" % (key, val))
 
     @set_ev_cls(ofp_event.EventOFPPortStatsReply, MAIN_DISPATCHER)
     def _port_stats_reply_handler(self, ev):

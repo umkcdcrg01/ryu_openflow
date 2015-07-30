@@ -36,6 +36,8 @@ from ryu.topology import event
 import pickle
 from ryu import utils
 import traceback
+from utilityLib_v1 import Utilites
+
 
 # from ryu.app.wsgi import ControllerBase, WSGIApplication, route
 
@@ -100,6 +102,8 @@ class SimpleSwitch13(app_manager.RyuApp):
         self.dpid_datapathObj = {}
         self.icmp_count = 0
         self.icmp_track_list = {}
+        self.icmp_path_list = {}
+        self.util = Utilites()
         # self._update_switch_dpid_list()
 
     # Given DPID, output hostname in string
@@ -114,6 +118,7 @@ class SimpleSwitch13(app_manager.RyuApp):
             for line in iff:
                 hostname, dpid = line.split()
                 self.hostname_list[int(dpid, 16)] = hostname
+
 
         # print self.hostname_list
         # NEED add some datapath check later
@@ -303,9 +308,11 @@ class SimpleSwitch13(app_manager.RyuApp):
                     data = msg.data
                 print "\t", "in_port:", in_port, type(in_port), " output_port: ", output_port, type(output_port)
                 try:
-                    match = parser.OFPMatch(in_port=in_port, eth_dst=dst, eth_type=0x0800, ipv4_src=src_ip,
+                    match = parser.OFPMatch(in_port=in_port, eth_src=src, eth_dst=dst, eth_type=0x0800, ipv4_src=src_ip,
                                             ipv4_dst=dst_ip, ip_proto=1)
-                    reserse_match = parser.OFPMatch(in_port=output_port, eth_dst=src, eth_type=0x0800, ipv4_src=dst_ip,
+                    # self.logger.info("\tMATCH: ~~~~~~~~~~~~~ %s %s %s %s " % (
+                    #     type(match), match, match.get("ip_proto"), self.util.return_flows_based_on_switch_name(self._hostname_Check(next_datapath.id), match)))
+                    reserse_match = parser.OFPMatch(in_port=output_port, eth_src=dst, eth_dst=src, eth_type=0x0800, ipv4_src=dst_ip,
                                                     ipv4_dst=src_ip, ip_proto=1)
                     reserse_action = [parser.OFPActionOutput(in_port)]
                     if msg.buffer_id != ofproto.OFP_NO_BUFFER:
@@ -338,7 +345,7 @@ class SimpleSwitch13(app_manager.RyuApp):
                     data = None
                     if msg.buffer_id == ofproto.OFP_NO_BUFFER:
                         data = msg.data
-                    match = parser.OFPMatch(in_port=in_port, eth_dst=dst, eth_type=0x0800, ipv4_src=src_ip,
+                    match = parser.OFPMatch(in_port=in_port, eth_src=src, eth_dst=dst, eth_type=0x0800, ipv4_src=src_ip,
                                             ipv4_dst=dst_ip, ip_proto=1)
                     print "\tinstall flow at node: %s" % (self._hostname_Check(node),)
                     print "\t", "in_port %s from dpid %s output_port %s" % (
@@ -346,7 +353,7 @@ class SimpleSwitch13(app_manager.RyuApp):
                         output_port)
                     self.add_flow(next_datapath, ICMP_PRIORITY, match, actions, ICMP_IDLE_TIMER, msg.buffer_id)
 
-                    reserse_match = parser.OFPMatch(in_port=output_port, eth_dst=src, eth_type=0x0800, ipv4_src=dst_ip,
+                    reserse_match = parser.OFPMatch(in_port=output_port, eth_src=dst, eth_dst=src, eth_type=0x0800, ipv4_src=dst_ip,
                                                     ipv4_dst=src_ip, ip_proto=1)
                     reserse_action = [parser.OFPActionOutput(in_port)]
                     print "\tinstall reverse flow at node: %s" % (self._hostname_Check(node),)
@@ -367,14 +374,14 @@ class SimpleSwitch13(app_manager.RyuApp):
                         actions = [parser.OFPActionOutput(output_port)]
                         in_port = self.link_port[last_node][node]
                         output_port = int(self._get_output_port(next_datapath.id, dst))
-                        match = parser.OFPMatch(in_port=in_port, eth_dst=dst, eth_type=0x0800, ipv4_src=src_ip,
+                        match = parser.OFPMatch(in_port=in_port, eth_src=src, eth_dst=dst, eth_type=0x0800, ipv4_src=src_ip,
                                                 ipv4_dst=dst_ip, ip_proto=1)
                         print "\tinstall flow at node: %s" % (self._hostname_Check(last_node),)
                         print "\t", "in_port %s from dpid %s output_port %s To node %s" % (
                             in_port, self._hostname_Check(next_node), output_port, dst)
                         self.add_flow(next_datapath, ICMP_PRIORITY, match, actions, ICMP_IDLE_TIMER, msg.buffer_id)
 
-                        reserse_match = parser.OFPMatch(in_port=output_port, eth_dst=src, eth_type=0x0800, ipv4_src=dst_ip,
+                        reserse_match = parser.OFPMatch(in_port=output_port, eth_src=dst, eth_dst=src, eth_type=0x0800, ipv4_src=dst_ip,
                                                         ipv4_dst=src_ip, ip_proto=1)
                         reserse_action = [parser.OFPActionOutput(in_port)]
                         print "\tinstall reverse flow at node: %s" % (last_node,)
