@@ -200,14 +200,17 @@ class ICMPTrafficController(app_manager.RyuApp):
 
         self.logger.info("\tFound the second new path %s" % second_new_path)
         hosts = [src_mac, dst_mac]
+        # install flows bettween host and switches
         self.install_flows_for_hosts_and_attached_switches(hosts, second_new_path, src_ip, dst_ip, src_mac, dst_mac)
+        # install flow for the rest of switches
         if len(second_new_path) > 2:
-            self.install_flows_for_rest_of_switches(second_new_path, src_ip, dst_ip, src_mac, dst_mac)
+            self.util.install_flows_for_rest_of_switches(second_new_path, src_ip, dst_ip, src_mac, dst_mac, self.dpid_datapathObj)
 
         # write to the icmp rereoute log
         with open(OFP_ICMP_REROUTE_LOG, 'w') as inp:
             inp.write("%s %s %s" % (src_mac, dst_mac, second_new_path))
 
+        # delete previous flows
         self.logger.info("delete old icmp flows along the prevous path")
         for node in icmp_path:
             self.logger.info("\tDelete Flows From %s" % node)
@@ -226,96 +229,18 @@ class ICMPTrafficController(app_manager.RyuApp):
                 self.util.del_flow(node_datapath_obj, ICMP_PRIORITY, match, actions, ICMP_IDLE_TIMER, HARD_TIMER, int(each_path[7]))
                 self.logger.info("\tDeleted at %s %s %s %s %s %s %s" % (node, each_path[0], each_path[1], each_path[2], each_path[5], each_path[6], each_path[7]))
 
-    def install_flows_for_rest_of_switches(self, second_new_path, src_ip, dst_ip, src_mac, dst_mac):
-        # shortest path is list of strings
-        self.logger.info("icmpTrafficController_V1: install_flows_for_rest_of_switches:")
-        count = len(second_new_path)
-        switch_dpid_list = {}
-        self.logger.info("\tRead switch name and dpid into switch_dpid_list")
-        with open(OFP_SWITCHES_LIST, 'r') as inp:
-            for line in inp:
-                switch_name = line.split()[0]
-                dpid = int(line.split()[1], 16)
-                switch_dpid_list[switch_name] = dpid
-
-        self.logger.info("\t switch_dpid_list %s" % switch_dpid_list)
-
-        for i in xrange(count):
-            if i != 0 and i != count - 1:
-                current_switch_name = second_new_path[i]
-                previsou_switch_name = second_new_path[i - 1]
-                next_switch_name = second_new_path[i + 1]
-                datapath_obj = self.dpid_datapathObj[switch_dpid_list[current_switch_name]]
-                in_port = int(self.util.return_switch_connection_port(current_switch_name, previsou_switch_name))
-                out_port = int(self.util.return_switch_connection_port(current_switch_name, next_switch_name))
-                self.logger.info("\tInstall Flow at %s inport=%s output_port=%s" % (current_switch_name, in_port, out_port))
-                match = datapath_obj.ofproto_parser.OFPMatch(in_port=in_port, eth_dst=dst_mac, eth_src=src_mac, eth_type=0x0800, ipv4_src=src_ip,
-                                                             ipv4_dst=dst_ip, ip_proto=1)
-                actions = [datapath_obj.ofproto_parser.OFPActionOutput(out_port)]
-                self.util.add_flow(datapath_obj, ICMP_PRIORITY, match, actions, ICMP_REROUTE_IDLE_TIME, HARD_TIMER)
-
-                self.logger.info("\tInstall Reverse Flow at %s  inport=%s output_port=%s" % (current_switch_name, out_port, in_port))
-                reverse_match = datapath_obj.ofproto_parser.OFPMatch(in_port=out_port, eth_dst=src_mac, eth_src=dst_mac, eth_type=0x0800, ipv4_src=dst_ip,
-                                                                     ipv4_dst=src_ip, ip_proto=1)
-                reverse_actions = [datapath_obj.ofproto_parser.OFPActionOutput(in_port)]
-                self.util.add_flow(datapath_obj, ICMP_PRIORITY, reverse_match, reverse_actions, ICMP_REROUTE_IDLE_TIME, HARD_TIMER)
-
     def install_flows_for_hosts_and_attached_switches(self, hosts, shortest_path, src_ip, dst_ip, src_mac, dst_mac):
         count = 0
         for h_mac in hosts:
             if count < len(hosts) and count == 0:
-                self.install_flow_between_host_and_switch(
-                    h_mac, 'ICMP', shortest_path[count:count + 2], count, src_ip, dst_ip, src_mac, dst_mac)
+                self.util.install_flow_between_host_and_switch_for_ICMP(
+                    h_mac, 'ICMP', shortest_path[count:count + 2], count, src_ip, dst_ip, src_mac, dst_mac, self.dpid_datapathObj)
                 count += 1
             elif count < len(hosts) and count == 1:
-                self.install_flow_between_host_and_switch(
-                    h_mac, 'ICMP', list([shortest_path[len(shortest_path) - 1], shortest_path[len(shortest_path) - 2]]),
-                    count, src_ip, dst_ip, src_mac, dst_mac)
+                self.util.install_flow_between_host_and_switch_for_ICMP(
+                     h_mac, 'ICMP', list([shortest_path[len(shortest_path) - 1], shortest_path[len(shortest_path) - 2]]),
+                     count, src_ip, dst_ip, src_mac, dst_mac, self.dpid_datapathObj)
                 count += 1
-
-    def install_flow_between_host_and_switch(self, h_mac, traffic_mode, shorestPath, host_position, src_ip, dst_ip, src_mac, dst_mac):
-        self.logger.info("icmpTrafficController_V1: install_flow_between_host_and_switch")
-        # 192.168.1.25 0000ae7e24cd5e40 2 02:63:ff:a5:b1:0f
-        # first found out which switch does this host attach to
-        with open(OFP_HOST_SWITCHES_LIST, 'r') as inp:
-            for line in inp:
-                host_ip, dpid, inport, mac = line.split()
-                if h_mac == mac:
-                    self.logger.info("\tFound attached switch at %s for mac %s" % (self._hostname_Check(int(str(dpid), 16)), h_mac))
-
-                    datapath_obj = self.dpid_datapathObj[int(str(dpid), 16)]
-                    self.logger.info("\t%s %s %s %s %s" % (type(inport), type(dst_mac), type(src_mac), type(src_ip), type(dst_ip)))
-                    # match_to_switch = datapath_obj.ofproto_parser.OFPMatch(in_port=int(inport), eth_dst=dst_mac, eth_src=src_mac, ipv4_src=src_ip,
-                    #                                                        ipv4_dst=dst_ip, tcp_src=src_port, tcp_dst=dst_port)
-                    if host_position == 0:
-                        match_to_switch = datapath_obj.ofproto_parser.OFPMatch(in_port=int(inport), eth_dst=dst_mac, eth_src=src_mac, eth_type=0x0800, ipv4_src=src_ip,
-                                                                               ipv4_dst=dst_ip, ip_proto=1)
-                    elif host_position == 1:
-                        match_to_switch = datapath_obj.ofproto_parser.OFPMatch(in_port=int(inport), eth_dst=src_mac, eth_src=dst_mac, eth_type=0x0800, ipv4_src=dst_ip,
-                                                                               ipv4_dst=src_ip, ip_proto=1)
-
-                    # found out output port
-                    output_port = int(self.util.return_switch_connection_port(shorestPath[0], shorestPath[1]))
-                    actions = [datapath_obj.ofproto_parser.OFPActionOutput(output_port)]
-                    self.logger.info("\tInstall Flow from %s to %s inport=%s output_port=%s" % (h_mac, self._hostname_Check(int(str(dpid), 16)), inport, output_port))
-                    self.util.add_flow(datapath_obj, ICMP_PRIORITY, match_to_switch, actions, ICMP_REROUTE_IDLE_TIME, HARD_TIMER)
-
-                    # match_to_host = datapath_obj.ofproto_parser.OFPMatch(in_port=output_port, eth_dst=src_mac, eth_src=dst_mac, ipv4_src=dst_ip,
-                    #                                                      ipv4_dst=src_ip, tcp_src=dst_port, tcp_dst=src_port)
-                    if host_position == 0:
-                        match_to_host = datapath_obj.ofproto_parser.OFPMatch(in_port=output_port, eth_dst=src_mac, eth_src=dst_mac, eth_type=0x0800, ipv4_src=dst_ip,
-                                                                             ipv4_dst=src_ip, ip_proto=1)
-                    elif host_position == 1:
-                        match_to_host = datapath_obj.ofproto_parser.OFPMatch(in_port=output_port, eth_dst=dst_mac, eth_src=src_mac, eth_type=0x0800, ipv4_src=src_ip,
-                                                                             ipv4_dst=dst_ip, ip_proto=1)
-
-                    reverse_actions = [datapath_obj.ofproto_parser.OFPActionOutput(int(inport))]
-                    self.logger.info("\tInstall reserse Flow from %s to %s inport=%s output_port=%s" % (self._hostname_Check(int(str(dpid), 16)), h_mac, output_port, inport))
-                    self.util.add_flow(datapath_obj, ICMP_PRIORITY, match_to_host, reverse_actions, ICMP_REROUTE_IDLE_TIME, HARD_TIMER)
-
-                    out = datapath_obj.ofproto_parser.OFPPacketOut(datapath=datapath_obj, buffer_id=0xffffffff,
-                                                                   in_port=int(inport), actions=actions, data=None)
-                    datapath_obj.send_msg(out)
 
     def check_if_path_overlape(self, path1, path2):
         # return True is one of them is subset of another one

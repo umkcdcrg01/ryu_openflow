@@ -3,7 +3,7 @@
 # s.zhao.j@gmail.com#
 # szb53@h4:~/ryu/ryu/app$
 #       ryu-manager --observe-links myswitch_v13.py
-#               myarp_v5.py trafficMonitor_v5.py host_tracker_topo_2.py gui_topology/gui_topology.py iperfController_v2.py  icmpTrafficController_V1
+#               myarp_v5.py trafficMonitor_v5.py host_tracker_topo_2.py gui_topology/gui_topology.py iperfController_v2.py  icmpTrafficController_V1 utilityLib_v1
 # How to run:
 # issue: Web http://192.1.242.160:8080 does not show any topology
 # add more match field for ICMP package
@@ -33,7 +33,7 @@ import time
 import networkx as nx
 from ryu.topology.api import get_switch, get_link
 from ryu.topology import event
-import pickle
+import cPickle
 from ryu import utils
 import traceback
 from utilityLib_v1 import Utilites
@@ -69,6 +69,8 @@ OFP_HOST_SWITCHES_LIST_BACK = \
     './network-data2/ofp_host_switches_list_backup.db'
 OFP_ICMP_LOG = \
     './network-data2/ofp_icmp_log.db'
+OFP_DATAPATH_OBJ_LOG = \
+    './network-data2/ofp_datapath_obj.db'
 
 ICMP_IDLE_TIMER = 60
 TABLE_MISS_TIMER = 0
@@ -455,7 +457,7 @@ class SimpleSwitch13(app_manager.RyuApp):
                 self.logger.info("\t No Luck for the %d time, keep searching..." % count)
                 if count <= 10:
                     print "\t retry"
-                    time.sleep(2)
+                    time.sleep(1)
                     count += 1
                     with open(OFP_HOST_SWITCHES_LIST_BACK, 'r') as inp:
                         for line in inp:
@@ -657,6 +659,10 @@ class SimpleSwitch13(app_manager.RyuApp):
                 self.logger.info('unregister datapath: %016x', datapath.id)
                 del self.datapaths[datapath.id]
 
+    def pickle_datapath_file(self):
+        with open(OFP_DATAPATH_OBJ_LOG, 'wb') as outp:
+            cPickle.dump(self.dpid_datapathObj, outp, -1)
+
     def _monitor(self):
         # wait fof around 10s until all the swtiches connected to controller
         # self._update_switch_dpid_list()
@@ -670,6 +676,7 @@ class SimpleSwitch13(app_manager.RyuApp):
                 self._all_paths_shortest_path()
                 self._link_port()
                 self._all_simple_path()
+                # self.pickle_datapath_file()
             hub.sleep(10)
 
     # The switch notifies controller of change of ports.
