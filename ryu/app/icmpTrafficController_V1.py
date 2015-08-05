@@ -89,10 +89,10 @@ class ICMPTrafficController(app_manager.RyuApp):
         # ofproto = datapath.ofproto
         # parser = datapath.ofproto_parser
 
-        # self.logger.info(
+        # self.logger.debug(
         #     "   datapath in decimal %s,in hex %s",
         #     datapath.id, hex(int(datapath.id)))
-        # self.logger.info('   OFPSwitchFeatures received: '
+        # self.logger.debug('   OFPSwitchFeatures received: '
         #                  'datapath_id=0x%016x n_buffers=%d '
         #                  'n_tables=%d auxiliary_id=%d '
         #                  'capabilities=0x%08x',
@@ -123,17 +123,17 @@ class ICMPTrafficController(app_manager.RyuApp):
             return self.hostname_list[datapath]
 
     def _request_stats(self):
-        self.logger.info("icmpTrafficController: ")
+        self.logger.debug("icmpTrafficController: ")
         if(not os.path.exists(OFP_ICMP_LOG)):
             icmp_detail = ""
             icmp_path = []
         else:
             with open(OFP_ICMP_LOG, 'r') as inp:
                 for line in inp:
-                    # self.logger.info("\t%s %s" % (line.strip(), type(line)))
+                    # self.logger.debug("\t%s %s" % (line.strip(), type(line)))
                     icmp_path = line.split()[2:-1]
                     icmp_detail = line
-                    self.logger.info("\tICMP %s" % (icmp_path))
+                    self.logger.debug("\tICMP %s" % (icmp_path))
 
         if(not os.path.exists(OFP_IPERF_LOG)):
             iperf_detail = ""
@@ -142,9 +142,9 @@ class ICMPTrafficController(app_manager.RyuApp):
             with open(OFP_IPERF_LOG, 'r') as inp:
                 for line in inp:
                     iperf_detail = line
-                    # self.logger.info("\t%s %s" % (line.strip(), type(line)))
+                    # self.logger.debug("\t%s %s" % (line.strip(), type(line)))
                     iperf_path = line.split()[6:]
-                    self.logger.info("\tIPERF %s" % (iperf_path))
+                    self.logger.debug("\tIPERF %s" % (iperf_path))
 
         # self.traffic_checked_list only save one icmp traffic and iperf traffic,
         # icmp/iperf detailed get update for every different ping/iperf_client
@@ -153,9 +153,9 @@ class ICMPTrafficController(app_manager.RyuApp):
                 self.traffic_checked_list.insert(0, icmp_detail)
                 self.traffic_checked_list.insert(1, iperf_detail)
                 if self.check_if_path_overlape(icmp_path, iperf_path):
-                    self.logger.info("\t1. Path OVerlap, Now check if Iperf traffic is over 50Mbits/s~~~~~~~~~~~~~~~~~~~~~~~")
+                    self.logger.debug("\t1. Path OVerlap, Now check if Iperf traffic is over 50Mbits/s~~~~~~~~~~~~~~~~~~~~~~~")
                     if self.check_iperf_traffic_on_path(iperf_path) > 50:
-                        self.logger.info("\t1. Install new flows for ICMP traffic from %s to %s" % (icmp_path[0], icmp_path[-1]))
+                        self.logger.debug("\t1. Install new flows for ICMP traffic from %s to %s" % (icmp_path[0], icmp_path[-1]))
                         if self.check_if_icmp_traffic_on(icmp_path):
                             self.icmp_reroute(icmp_path, icmp_detail)
                 return
@@ -163,9 +163,9 @@ class ICMPTrafficController(app_manager.RyuApp):
                 self.traffic_checked_list.pop(0)
                 self.traffic_checked_list.insert(0, icmp_detail)
                 if self.check_if_path_overlape(icmp_path, iperf_path):
-                    self.logger.info("\t2. Path OVerlap, Now check if Iperf traffic is over 50Mbits/s~~~~~~~~~~~~~~~~~~~~~~~")
+                    self.logger.debug("\t2. Path OVerlap, Now check if Iperf traffic is over 50Mbits/s~~~~~~~~~~~~~~~~~~~~~~~")
                     if self.check_iperf_traffic_on_path(iperf_path) > 50:
-                        self.logger.info("\t2. Install new flows for ICMP traffic from %s to %s" % (icmp_path[0], icmp_path[-1]))
+                        self.logger.debug("\t2. Install new flows for ICMP traffic from %s to %s" % (icmp_path[0], icmp_path[-1]))
                         if self.check_if_icmp_traffic_on(icmp_path):
                             self.icmp_reroute(icmp_path, icmp_detail)
                 return
@@ -173,9 +173,9 @@ class ICMPTrafficController(app_manager.RyuApp):
                 self.traffic_checked_list.pop(1)
                 self.traffic_checked_list.insert(1, iperf_detail)
                 if self.check_if_path_overlape(icmp_path, iperf_path):
-                    self.logger.info("\t3. Path OVerlap, Now check if Iperf traffic is over 50Mbits/s~~~~~~~~~~~~~~~~~~~~~~~")
+                    self.logger.debug("\t3. Path OVerlap, Now check if Iperf traffic is over 50Mbits/s~~~~~~~~~~~~~~~~~~~~~~~")
                     if self.check_iperf_traffic_on_path(iperf_path) > 50:
-                        self.logger.info("\t3. Install new flows for ICMP traffic from %s to %s" % (icmp_path[0], icmp_path[-1]))
+                        self.logger.debug("\t3. Install new flows for ICMP traffic from %s to %s" % (icmp_path[0], icmp_path[-1]))
                         if self.check_if_icmp_traffic_on(icmp_path):
                             self.icmp_reroute(icmp_path, icmp_detail)
                 return
@@ -183,41 +183,42 @@ class ICMPTrafficController(app_manager.RyuApp):
             # icmp and iperf happens at the same time
 
     def icmp_reroute(self, icmp_path, icmp_detail):
-        self.logger.info("ICMPTrafficController:")
+        self.logger.debug("ICMPTrafficController:")
         # find the current icmp_path flows
         # based on recored icmp packge information, find a new path which is different from the currernt one, install new flows, delete all the flows
         icmp_info = icmp_detail.split()[-1]
         src_mac, dst_mac, src_ip, dst_ip = icmp_info.split('-')[1], icmp_info.split('-')[2],\
             icmp_info.split('-')[3], icmp_info.split('-')[4]
-        self.logger.info("\tFinding the second shortest path for %s %s %s %s %s" % (icmp_path[0], src_mac, dst_mac, src_ip, dst_ip))
+        self.logger.debug("\tFinding the second shortest path for %s %s %s %s %s" % (icmp_path[0], src_mac, dst_mac, src_ip, dst_ip))
         src_dpid_name = icmp_path[0]
         dst_dpid_name = icmp_path[-1]
         all_shortest_path = self.util.return_all_shortest_paths(src_dpid_name, dst_dpid_name)
-        self.logger.info("\tAll all_shortest_path: %s", all_shortest_path)
+        self.logger.debug("\tAll all_shortest_path: %s", all_shortest_path)
         for path in all_shortest_path:
             if icmp_path != path:
                 second_new_path = path
 
-        self.logger.info("\tFound the second new path %s" % second_new_path)
+        self.logger.debug("\tFound the second new path %s" % second_new_path)
         hosts = [src_mac, dst_mac]
         # install flows bettween host and switches
         self.install_flows_for_hosts_and_attached_switches(hosts, second_new_path, src_ip, dst_ip, src_mac, dst_mac)
         # install flow for the rest of switches
         if len(second_new_path) > 2:
-            self.util.install_flows_for_rest_of_switches(second_new_path, src_ip, dst_ip, src_mac, dst_mac, self.dpid_datapathObj)
+            self.util.install_flows_for_rest_of_switches(
+              second_new_path, 'ICMP', ICMP_PRIORITY, src_ip, dst_ip, src_mac, dst_mac, self.dpid_datapathObj, ICMP_IDLE_TIMER, HARD_TIMER)
 
         # write to the icmp rereoute log
         with open(OFP_ICMP_REROUTE_LOG, 'w') as inp:
             inp.write("%s %s %s" % (src_mac, dst_mac, second_new_path))
 
         # delete previous flows
-        self.logger.info("delete old icmp flows along the prevous path")
+        self.logger.debug("delete old icmp flows along the prevous path")
         for node in icmp_path:
-            self.logger.info("\tDelete Flows From %s" % node)
+            self.logger.debug("\tDelete Flows From %s" % node)
             # match = parser.OFPMatch(in_port=in_port, eth_src=src, eth_dst=dst, eth_type=0x0800, ipv4_src=src_ip,
             #                                 ipv4_dst=dst_ip, ip_proto=1)
             previous_flows = self.util.return_flows_info_based_on_switch_name(node, 'ICMP', ICMP_PRIORITY)
-            self.logger.info("\t previous_flows details %s" % previous_flows)
+            self.logger.debug("\t previous_flows details %s" % previous_flows)
             node_dpid = self.util.return_decimalDPID_baseON_swithName(node)
             node_datapath_obj = self.dpid_datapathObj[int(node_dpid)]
             for each_path in previous_flows:
@@ -227,7 +228,7 @@ class ICMPTrafficController(app_manager.RyuApp):
                                                                   ipv4_dst=each_path[6], ip_proto=1)
                 actions = [node_datapath_obj.ofproto_parser.OFPActionOutput(int(each_path[7]))]
                 self.util.del_flow(node_datapath_obj, ICMP_PRIORITY, match, actions, ICMP_IDLE_TIMER, HARD_TIMER, int(each_path[7]))
-                self.logger.info("\tDeleted at %s %s %s %s %s %s %s" % (node, each_path[0], each_path[1], each_path[2], each_path[5], each_path[6], each_path[7]))
+                self.logger.debug("\tDeleted at %s %s %s %s %s %s %s" % (node, each_path[0], each_path[1], each_path[2], each_path[5], each_path[6], each_path[7]))
 
     def install_flows_for_hosts_and_attached_switches(self, hosts, shortest_path, src_ip, dst_ip, src_mac, dst_mac):
         count = 0

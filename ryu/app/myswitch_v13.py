@@ -2,8 +2,8 @@
 # Jack Zhao
 # s.zhao.j@gmail.com#
 # szb53@h4:~/ryu/ryu/app$
-#       ryu-manager --observe-links myswitch_v13.py
-#               myarp_v5.py trafficMonitor_v5.py host_tracker_topo_2.py gui_topology/gui_topology.py iperfController_v2.py  icmpTrafficController_V1 utilityLib_v1
+#     ryu-manager --observe-links myswitch_v13.py
+#          myarp_v5.py trafficMonitor_v5.py host_tracker_topo_2.py gui_topology/gui_topology.py iperfController_v2.py  icmpTrafficController_V1 utilityLib_v1 hdfs_v1 hadoopSSH_v1
 # How to run:
 # issue: Web http://192.1.242.160:8080 does not show any topology
 # add more match field for ICMP package

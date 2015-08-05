@@ -192,12 +192,10 @@ class IperfController(app_manager.RyuApp):
             if pkt_udp:
                 src_port = pkt_udp.src_port
                 dst_port = pkt_udp.dst_port
-
-            self.logger.debug("IperfController: Packet-In:")
-
-            self.logger.info("\tAt %s from %s to %s from src_port %s to dst_port %s from  port %s src_mac %s dst_mac %s" %
-                             (self._hostname_Check(datapath.id), src_ip, dst_ip, src_port, dst_port, in_port, src_mac, dst_mac))
             if str(dst_port) == '5001':
+                self.logger.Info("IperfController: Packet-In:")
+                self.logger.info("\tAt %s from %s to %s from src_port %s to dst_port %s from  port %s src_mac %s dst_mac %s" %
+                             (self._hostname_Check(datapath.id), src_ip, dst_ip, src_port, dst_port, in_port, src_mac, dst_mac))
                 key = (src_ip, dst_ip, src_mac, dst_mac, dst_port)
                 if key not in self.iperf_learning.keys():
                     if pkt_tcp:

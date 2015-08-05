@@ -39,6 +39,7 @@ OFP_DATAPATH_OBJ_LOG = \
 
 ICMP_PRIORITY = 3
 IPERF_PRIORITY = 4
+SSH_PRIORITY = 5
 ICMP_IDLE_TIMER = 60
 ICMP_REROUTE_IDLE_TIME = 70
 HARD_TIMER = 0
@@ -54,14 +55,13 @@ class Utilites():
         # create thread for traffic monitoring
         # self.monitor_thread = hub.spawn(self._monitor)
         self.hostname_list = {}
-        dpid_datapathObj = {}
         self.iperf_learning = {}
         self.iperf_track_list = {}
         # self._update_switch_dpid_list()
 
     # Given DPID, output hostname in string
     def hostname_Check(self, datapath):
-        print("UtilityLib:")
+        # print("UtilityLib:")
         # Given decimal datapath ID, return hostname
         # datapath should be in integer format
         if os.path.exists(os.path.abspath(OFP_SWITCHES_LIST_PREVIOUS)):
@@ -119,10 +119,98 @@ class Utilites():
     #         datapath_dict = cPickle.load(inp)
     #     print datapath_dict
 
-    def install_flows_for_rest_of_switches(self, second_new_path, src_ip, dst_ip, src_mac, dst_mac, dpid_datapathObj):
+    def install_flows_for_same_switch(self, switchname, traffic_mode, src_ip, dst_ip, src_mac, dst_mac, src_port, dst_port, dpid_datapathObj, idle_timer, hard_timer):
+        print("UtilityLib: install_flows_for_same_switch:")
+        if traffic_mode == 'TCP' or traffic_mode == 'UDP':
+            ipProto = 6
+        if traffic_mode == 'ICMP':
+            ipProto = 1
+        src_inport = dst_inport = ''
+        with open(OFP_HOST_SWITCHES_LIST, 'r') as inp:
+            for line in inp:
+                host_ip, dpid, inport, mac = line.split()
+                if src_mac == mac:
+                    print("\tFound attached switch at %s for mac %s" % (self.hostname_Check(int(str(dpid), 16)), src_mac))
+                    try:
+                        datapath_obj = dpid_datapathObj[int(str(dpid), 16)]
+                    finally:
+                        print dpid_datapathObj
+                    src_inport = int(inport)
+                if dst_mac == mac:
+                    dst_inport = int(inport)
+
+                if src_inport and dst_inport:
+                    print("\tAt %s  inport=%s another inport=%s" % (switchname, src_inport, dst_inport))
+                    match_to_switch = datapath_obj.ofproto_parser.OFPMatch(in_port=int(src_inport), eth_dst=dst_mac, eth_src=src_mac, eth_type=0x0800, ipv4_src=src_ip,
+                                                                           ipv4_dst=dst_ip, ip_proto=ipProto, tcp_dst=dst_port, tcp_src=src_port)
+                    actions = [datapath_obj.ofproto_parser.OFPActionOutput(dst_inport)]
+                    self.add_flow(datapath_obj, SSH_PRIORITY, match_to_switch, actions, idle_timer, hard_timer)
+
+                    # match_to_host = datapath_obj.ofproto_parser.OFPMatch(in_port=output_port, eth_dst=src_mac, eth_src=dst_mac, ipv4_src=dst_ip,
+                    #                                                      ipv4_dst=src_ip, tcp_src=dst_port, tcp_dst=src_port
+                    match_to_switch = datapath_obj.ofproto_parser.OFPMatch(in_port=dst_inport, eth_dst=src_mac, eth_src=dst_mac, eth_type=0x0800, ipv4_src=dst_ip,
+                                                                           ipv4_dst=src_ip, ip_proto=ipProto, tcp_dst=src_port, tcp_src=dst_port)
+                    reverse_actions = [datapath_obj.ofproto_parser.OFPActionOutput(int(src_inport))]
+                    print("\tInstall reserse Flow from %s to %s inport=%s output_port=%s" % (self.hostname_Check(int(str(dpid), 16)), dst_mac, dst_inport, src_inport))
+                    self.add_flow(datapath_obj, SSH_PRIORITY, match_to_switch, reverse_actions, idle_timer, hard_timer)
+
+                    out = datapath_obj.ofproto_parser.OFPPacketOut(datapath=datapath_obj, buffer_id=0xffffffff,
+                                                                   in_port=int(src_inport), actions=actions, data=None)
+                    datapath_obj.send_msg(out)
+                    return
+
+    def install_flows_for_same_switch_v2(self, switchname, traffic_mode, src_ip, dst_ip, src_mac, dst_mac, src_port, dst_port, dpid_datapathObj, idle_timer, hard_timer, msg):
+        print("UtilityLib: install_flows_for_same_switch_v2: Reverse Install")
+        if traffic_mode == 'TCP' or traffic_mode == 'UDP':
+            ipProto = 6
+        if traffic_mode == 'ICMP':
+            ipProto = 1
+        src_inport = dst_inport = ''
+        with open(OFP_HOST_SWITCHES_LIST, 'r') as inp:
+            for line in inp:
+                host_ip, dpid, inport, mac = line.split()
+                if dst_mac == mac:
+                    print("\tFound attached switch at %s for mac %s" % (self.hostname_Check(int(str(dpid), 16)), src_mac))
+                    try:
+                        datapath_obj = dpid_datapathObj[int(str(dpid), 16)]
+                    finally:
+                        print dpid_datapathObj
+                    dst_inport = int(inport)
+                if src_mac == mac:
+                    src_inport = int(inport)
+
+                if src_inport and dst_inport:
+                    print("\tInstall Flow from %s to %s inport=%s output_port=%s" % (self.hostname_Check(int(str(dpid), 16)), dst_mac, dst_inport, src_inport))
+                    match_to_switch = datapath_obj.ofproto_parser.OFPMatch(in_port=int(dst_inport), eth_dst=src_mac, eth_src=dst_mac, eth_type=0x0800, ipv4_src=dst_ip,
+                                                                           ipv4_dst=src_ip, ip_proto=ipProto, tcp_dst=src_port, tcp_src=dst_port)
+                    actions = [datapath_obj.ofproto_parser.OFPActionOutput(src_inport)]
+                    if msg.buffer_id != datapath_obj.ofproto.OFP_NO_BUFFER:
+                        self.add_flow(datapath_obj, SSH_PRIORITY, match_to_switch, actions, idle_timer, hard_timer, msg.buffer_id)
+                    else:
+                        self.add_flow(datapath_obj, SSH_PRIORITY, match_to_switch, actions, idle_timer, hard_timer)
+
+                    # match_to_host = datapath_obj.ofproto_parser.OFPMatch(in_port=output_port, eth_dst=src_mac, eth_src=dst_mac, ipv4_src=dst_ip,
+                    #                                                      ipv4_dst=src_ip, tcp_src=dst_port, tcp_dst=src_port
+                    match_to_switch = datapath_obj.ofproto_parser.OFPMatch(in_port=src_inport, eth_dst=dst_mac, eth_src=src_mac, eth_type=0x0800, ipv4_src=src_ip,
+                                                                           ipv4_dst=dst_ip, ip_proto=ipProto, tcp_dst=dst_port, tcp_src=src_port)
+                    reverse_actions = [datapath_obj.ofproto_parser.OFPActionOutput(int(dst_inport))]
+                    print("\tInstall reserse Flow from %s to %s inport=%s output_port=%s" % (self.hostname_Check(int(str(dpid), 16)), src_mac, src_inport, dst_inport))
+                    if msg.buffer_id != datapath_obj.ofproto.OFP_NO_BUFFER:
+                        self.add_flow(datapath_obj, SSH_PRIORITY, match_to_switch, reverse_actions, idle_timer, hard_timer, msg.buffer_id)
+                    else:
+                        self.add_flow(datapath_obj, SSH_PRIORITY, match_to_switch, reverse_actions, idle_timer, hard_timer)
+
+                    data = None
+                    if msg.buffer_id == datapath_obj.ofproto.OFP_NO_BUFFER:
+                        data = msg.data
+                    out = datapath_obj.ofproto_parser.OFPPacketOut(datapath=datapath_obj, buffer_id=msg.buffer_id,
+                                                                   in_port=int(src_inport), actions=actions, data=data)
+                    datapath_obj.send_msg(out)
+
+    def install_flows_for_rest_of_switches(self, shorestPath, traffic_mode, priority, src_ip, dst_ip, src_mac, dst_mac, dpid_datapathObj, idle_timer, hard_timer):
         # shortest path is list of strings
         print("UtilityLib: install_flows_for_rest_of_switches:")
-        count = len(second_new_path)
+        count = len(shorestPath)
         switch_dpid_list = {}
         print("\tRead switch name and dpid into switch_dpid_list")
         with open(OFP_SWITCHES_LIST, 'r') as inp:
@@ -133,28 +221,34 @@ class Utilites():
 
         print("\t switch_dpid_list %s" % switch_dpid_list)
 
+        if traffic_mode == 'TCP' or traffic_mode == 'UDP':
+            ipProto = 6
+        if traffic_mode == 'ICMP':
+            ipProto = 1
+
         for i in xrange(count):
             if i != 0 and i != count - 1:
-                current_switch_name = second_new_path[i]
-                previsou_switch_name = second_new_path[i - 1]
-                next_switch_name = second_new_path[i + 1]
+                current_switch_name = shorestPath[i]
+                previsou_switch_name = shorestPath[i - 1]
+                next_switch_name = shorestPath[i + 1]
                 datapath_obj = dpid_datapathObj[switch_dpid_list[current_switch_name]]
                 in_port = int(self.return_switch_connection_port(current_switch_name, previsou_switch_name))
                 out_port = int(self.return_switch_connection_port(current_switch_name, next_switch_name))
                 print("\tInstall Flow at %s inport=%s output_port=%s" % (current_switch_name, in_port, out_port))
                 match = datapath_obj.ofproto_parser.OFPMatch(in_port=in_port, eth_dst=dst_mac, eth_src=src_mac, eth_type=0x0800, ipv4_src=src_ip,
-                                                             ipv4_dst=dst_ip, ip_proto=1)
+                                                             ipv4_dst=dst_ip, ip_proto=ipProto)
                 actions = [datapath_obj.ofproto_parser.OFPActionOutput(out_port)]
-                self.add_flow(datapath_obj, ICMP_PRIORITY, match, actions, ICMP_REROUTE_IDLE_TIME, HARD_TIMER)
+                self.add_flow(datapath_obj, priority, match, actions, idle_timer, hard_timer)
 
                 print("\tInstall Reverse Flow at %s  inport=%s output_port=%s" % (current_switch_name, out_port, in_port))
                 reverse_match = datapath_obj.ofproto_parser.OFPMatch(in_port=out_port, eth_dst=src_mac, eth_src=dst_mac, eth_type=0x0800, ipv4_src=dst_ip,
-                                                                     ipv4_dst=src_ip, ip_proto=1)
+                                                                     ipv4_dst=src_ip, ip_proto=ipProto)
                 reverse_actions = [datapath_obj.ofproto_parser.OFPActionOutput(in_port)]
-                self.add_flow(datapath_obj, ICMP_PRIORITY, reverse_match, reverse_actions, ICMP_REROUTE_IDLE_TIME, HARD_TIMER)
+                self.add_flow(datapath_obj, priority, reverse_match, reverse_actions, idle_timer, hard_timer)
 
     def install_flow_between_host_and_switch_for_TCP_UDP(
-            self, h_mac, traffic_mode, shorestPath, host_position, src_ip, dst_ip, src_port, dst_port, src_mac, dst_mac, msg, dpid_datapathObj):
+            self, h_mac, traffic_mode, pritority, shorestPath,
+            host_position, src_ip, dst_ip, src_port, dst_port, src_mac, dst_mac, dpid_datapathObj, idle_timer, hard_timer, msg=None):
         print("> UtilityLib: Install flows between host and switch for TCP and UDP")
         # 192.168.1.25 0000ae7e24cd5e40 2 02:63:ff:a5:b1:0f
         # first found out which switch does this host attach to
@@ -188,9 +282,9 @@ class Utilites():
                     actions = [datapath_obj.ofproto_parser.OFPActionOutput(output_port)]
                     print("\tInstall Flow from %s to %s inport=%s output_port=%s" % (h_mac, self.hostname_Check(int(str(dpid), 16)), inport, output_port))
                     if msg.buffer_id != datapath_obj.ofproto.OFP_NO_BUFFER:
-                        self.add_flow(datapath_obj, IPERF_PRIORITY, match_to_switch, actions, ICMP_IDLE_TIMER, HARD_TIMER, msg.buffer_id)
+                        self.add_flow(datapath_obj, pritority, match_to_switch, actions, idle_timer, hard_timer, msg.buffer_id)
                     else:
-                        self.add_flow(datapath_obj, IPERF_PRIORITY, match_to_switch, actions, ICMP_IDLE_TIMER, HARD_TIMER)
+                        self.add_flow(datapath_obj, pritority, match_to_switch, actions, idle_timer, hard_timer)
 
                     # match_to_host = datapath_obj.ofproto_parser.OFPMatch(in_port=output_port, eth_dst=src_mac, eth_src=dst_mac, ipv4_src=dst_ip,
                     #                                                      ipv4_dst=src_ip, tcp_src=dst_port, tcp_dst=src_port)
@@ -212,16 +306,16 @@ class Utilites():
                     reverse_actions = [datapath_obj.ofproto_parser.OFPActionOutput(int(inport))]
                     print("\tInstall reserse Flow from %s to %s inport=%s output_port=%s" % (self.hostname_Check(int(str(dpid), 16)), h_mac, output_port, inport))
                     if msg.buffer_id != datapath_obj.ofproto.OFP_NO_BUFFER:
-                        self.add_flow(datapath_obj, IPERF_PRIORITY, match_to_host, reverse_actions, ICMP_IDLE_TIMER, HARD_TIMER, msg.buffer_id)
+                        self.add_flow(datapath_obj, pritority, match_to_host, reverse_actions, idle_timer, hard_timer, msg.buffer_id)
                     else:
-                        self.add_flow(datapath_obj, IPERF_PRIORITY, match_to_host, reverse_actions, ICMP_IDLE_TIMER, HARD_TIMER)
+                        self.add_flow(datapath_obj, pritority, match_to_host, reverse_actions, idle_timer, hard_timer)
 
                     out = datapath_obj.ofproto_parser.OFPPacketOut(datapath=datapath_obj, buffer_id=0xffffffff,
                                                                    in_port=int(inport), actions=actions, data=msg.data)
                     datapath_obj.send_msg(out)
 
     def install_flow_between_host_and_switch_for_ICMP(self, h_mac, traffic_mode, shorestPath, host_position, src_ip, dst_ip, src_mac, dst_mac, dpid_datapathObj):
-        print("> UtilityLib: Install flows between host and switch for ICMP")
+        print("UtilityLib: Install flows between host and switch for ICMP")
         # 192.168.1.25 0000ae7e24cd5e40 2 02:63:ff:a5:b1:0f
         # first found out which switch does this host attach to
         with open(OFP_HOST_SWITCHES_LIST, 'r') as inp:
@@ -295,31 +389,39 @@ class Utilites():
 
     def return_dst_dpid_hostname(self, dst_ip, dst_mac):
         # return destination switch's name (ex 'S1') based on given HOST's destination IP and mac address
-        print("return dstination DPID as Hostname")
+        print("Utilites: return dstination DPID as Hostname")
         dst_dpid_name = None
-        # print("\tsleeping for another 10 s .......................")
+        # time.sleep(2)
+        # print("\tsleeping for another 2 s .......................")
         with open(OFP_HOST_SWITCHES_LIST, 'r') as inp:
             for lines in inp:
                 ip_address, dpid, inport, host_mac = lines.split()
                 if ip_address == dst_ip and host_mac == dst_mac:
                     dst_dpid_name = self.hostname_Check(int(str(dpid), 16))
                     print("\tFound at match at .....................................%s" % dst_dpid_name)
-                    break
+                    return dst_dpid_name
+
         if dst_dpid_name == None:
-            print("\tsleeping for another 10 s ........................")
-            time.sleep(10)
+            print("\tsleeping for another 2 s ~~~~~~~.....................~~~~~")
+            time.sleep(2)
             with open(OFP_HOST_SWITCHES_LIST, 'r') as inp:
                 for lines in inp:
                     ip_address, dpid, inport, host_mac = lines.split()
                     if ip_address == dst_ip and host_mac == dst_mac:
                         dst_dpid_name = self.hostname_Check(int(str(dpid), 16))
-                        print("\tFound at match at .......................................%s" % dst_dpid_name)
-                        break
+                        print("\tFound at match at ~~~~~~~.....................~~~~~~%s" % dst_dpid_name)
+                        return dst_dpid_name
         return dst_dpid_name
 
     def return_shortest_path(self, src_dpid_name, dst_dpid_name):
         # return a list of switch's name ['s1', 's2', 's3']
         print("UtilityLib: return_dst_dpid_hostname:")
+        if src_dpid_name == dst_dpid_name:
+            print("\tBelong to same switch")
+            shortest_path = src_dpid_name
+            return [shortest_path]
+
+        # procceed only src switch name not equal to dst_dpid_name
         with open(OFP_SINGLE_SHOREST_PATH, 'r') as inp:
             # s4->s5 s4-s3-s2-s1-s5-
             for line in inp:

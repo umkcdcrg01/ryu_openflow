@@ -143,7 +143,7 @@ class MySimpleMonitor(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_handler(self, ev):
-        self.logger.info("simple_monitor.flow_stats:")
+        self.logger.debug("simple_monitor.flow_stats:")
         body = ev.msg.body
         dpid = ev.msg.datapath.id
         self.logger.debug("\t%s\n\t%s" % (type(body), body))
@@ -261,7 +261,7 @@ class MySimpleMonitor(app_manager.RyuApp):
                                       stat.instructions[0].actions[0].port,
                                       stat.packet_count, stat.byte_count,
                                       int(speed) * 8)
-                    if stat.priority == 3 or stat.priority == 4:
+                    if stat.priority == 3 or stat.priority == 4 or stat.priority == 5 or stat.priority == 6:
                         if stat.priority == 3:
                             inp.write('%s %s %s %s %s %s %s %s %s %s' %
                                       (self._hostname_Check(ev.msg.datapath.id),

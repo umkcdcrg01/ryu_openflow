@@ -102,16 +102,16 @@ class MySimpleArp(app_manager.RyuApp):
             self.mac_to_port[hex(dpid)][src] = inPort
         data = msg.data
 
+        # print mac_to_port for verification
+        self.logger.info("MySimpleArp: self.mac_to_port")
+        for key, value in self.mac_to_port.items():
+            print "\t", self._hostname_Check(int(str(key), 16)), value
+
         etherFrame = packets.get_protocol(ethernet)
 
         if etherFrame.ethertype == ether.ETH_TYPE_ARP:
             self.logger.debug("\n:")
-            # arpPacket = packets.get_protocol(arp)
-            # arpArriveTime = time.time()
-            # srcMac = etherFrame.src
-            # arp_dstIP = arpPacket.dst_ip
             dst = eth.dst
-
             self.receive_arp(datapath, packets, etherFrame, inPort, data)
             return 0
         else:
@@ -123,86 +123,107 @@ class MySimpleArp(app_manager.RyuApp):
         arpPacket = packets.get_protocol(arp)
         arp_dstIP = arpPacket.dst_ip
         arp_srcIP = arpPacket.src_ip
-        # self.logger.info("packet in %s %s %s %s", self._hostname_Check(datapath.id), etherFrame.src, etherFrame.dst, inPort)
-        self.logger.info("\t %s: receive ARP PACKET %s => %s (in_port=%d) From %s to %s"
-                         % (self._hostname_Check(datapath.id),
-                            etherFrame.src, etherFrame.dst, inPort, arp_srcIP, arp_dstIP))
+
         if arpPacket.opcode == 1:
-            print "\t ARP Requst: Test if it is repeated Broadcasting"
-            if self.anti_arp_brodcast(datapath, etherFrame, inPort, arp_dstIP):
-                # self.logger.info("%s: receive new ARP request %s => %s (port%d) src_ip=%s dst_ip=%s"
-                #                  % (self._hostname_Check(datapath.id), etherFrame.src, etherFrame.dst, inPort, arp_srcIP, arp_dstIP))
-                # print "-----packetToport: ", self.packetToport
-                # print "-----arp_learning: ", self.arp_learning
+            # self.logger.info("packet in %s %s %s %s", self._hostname_Check(datapath.id), etherFrame.src, etherFrame.dst, inPort)
+            self.logger.info("\tARP CODE: %s Switch: %s: REQUEST:::Just received a ARP REQEUST PACKET src_mac: %s => dst_mac: %s (in_port=%d) From srcIP: %s to dstIP: %s"
+                             % (arpPacket.opcode, self._hostname_Check(datapath.id),
+                                etherFrame.src, etherFrame.dst, inPort, arp_srcIP, arp_dstIP))
+            t = time.time()
+            # print "\tARP Requst: Test if it is repeated Broadcasting"
+            if self.anti_arp_brodcast(datapath, etherFrame, inPort, arp_dstIP, t):
+                # test if it is broadcasting ARP Request packet
                 self.reply_arp(datapath, etherFrame, arpPacket, arp_dstIP, inPort, data)
-            else:
-                self.logger.info("\t  Not ARP Broadcasting No Action is taken!!!!!~~~~")
-                # self.reply_arp(datapath, etherFrame, arpPacket, arp_dstIP, inPort, data)
-        elif arpPacket.opcode == 2:
-            self.logger.info("\t ARP_reply: then Forwarding this ARP reply packet !!!!!!!!!!!!!!")
-            self.logger.info("\t packet in %s %s %s %s", self._hostname_Check(
-                datapath.id), etherFrame.src, etherFrame.dst, inPort)
+            # else:
+            #     self.reply_arp(datapath, etherFrame, arpPacket, arp_dstIP, inPort, data)
+        # elif arpPacket.opcode == 2:
+        else:
+            # self.logger.info("\tARP_reply: ITS A ARP REPLY, then Forwarding this ARP reply packet !!!!!!!!!!!!!!")
+            self.logger.info("\tARP CODE: %s Switch: %s: REPLY:::Just received a ARP REPLY PACKET src_mac: %s => dst_mac: %s (in_port=%d) From srcIP: %s to dstIP: %s"
+                             % (arpPacket.opcode, self._hostname_Check(datapath.id),
+                                etherFrame.src, etherFrame.dst, inPort, arp_srcIP, arp_dstIP))
             self.reply_arp(datapath, etherFrame, arpPacket, arp_dstIP, inPort, data)
 
-    def anti_arp_brodcast(self, datapath, etherFrame, inPort, arp_dstIP):
+    def anti_arp_brodcast(self, datapath, etherFrame, inPort, arp_dstIP, received_time):
         test = False
         self.logger.info("MySimpleArp: anti_arp_brodcast:")
         if etherFrame.dst == "ff:ff:ff:ff:ff:ff":
-            # self.logger.info("self.packetToport:", self.packetToport)
-            # self.logger.info(self.packetToport[datapath.id].keys())
-            # self.logger.info(self.packetToport[datapath.id])
             if not self.packetToport[datapath.id]:
-                # self.logger.info("Another muticast packet form %s at %i port in %s " % (
-                #     etherFrame.src, inPort, self._hostname_Check(datapath.id)))
-                # self.logger.info("packetToport: ", self.packetToport)
-                # self.logger.info("arp_learning: ", self.arp_learning
-                self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)] = time.time()
-                self.logger.info("\t1 Added (%s %s %s): %s to self.packetToport and Forwarding ARP Broadcasting" %
-                                 (etherFrame.src, arp_dstIP, inPort, time.time()))
+                # if the current ARP dictionary for this switch is empty, then add this, and flood this broadcasting
+                self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)] = received_time
+                self.logger.info("\tRule 1: Added (%s %s %s): %s to self.packetToport and Forwarding ARP Broadcasting" %
+                                 (etherFrame.src, arp_dstIP, inPort, received_time))
                 test = True
                 return test
             elif ((etherFrame.src, arp_dstIP, inPort) in self.packetToport[datapath.id].keys()):
-                if(time.time() - self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)]) >= ARP_ENTRY_EXPIRE:
-                    self.logger.info("\t2 ARP ENTRY Expired, renew the timer")
-                    self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)] = time.time()
+                if(received_time - self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)]) <= ARP_ENTRY_EXPIRE:
+                    self.logger.info("\tRule 2: Renew the timer, But NOT FLOODING.....")
+                    self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)] = received_time
+                    test = False
+                    return test
+                elif(received_time - self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)]) > ARP_ENTRY_EXPIRE:
+                    self.logger.info("\tRule 6: ARP ENTRY Expired, renew the timer, FLOODING THIS TIME......")
+                    self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)] = received_time
                     test = True
                     return test
                 else:
-                    self.logger.info("\t2 ARP BLOCKING, No Further transfer")
-                # self.logger.info("Another muticast packet form %s at %i port in %s " % (
-                #     etherFrame.src, inPort, self._hostname_Check(datapath.id)))
-                # self.logger.info("{DPID: { (src_mac, dst_ip, in_port): arpArriveTime, ():time }")
+                    self.logger.info("\tRule 3: ARP BLOCKING, No Further transfer")
                     self.logger.info("\t %s %s" % (self._hostname_Check(datapath.id), self.packetToport[datapath.id].keys()))
                     test = False
                     return test
-            else:
-                # same ARP broadcast but from inport number is diffeernt from original port nubmer, block
-                for keys in self.packetToport[datapath.id].keys():
-                    if ((etherFrame.src, arp_dstIP) == keys[0:2]) and (inPort != keys[2]):
-                        self.logger.info("\t 4 same ARP packet coming from differe port. So not Forwarding ARP Broadcasting. Detail: (%s %s %s): %s" %
-                                         (etherFrame.src, arp_dstIP, inPort, time.time()))
-                        # add this entry, avoid if else checking next time
-                        self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)] = time.time()
-                        test = False
-                        return test
-                if ((etherFrame.src, arp_dstIP, inPort) not in self.packetToport[datapath.id].keys()):
-                    self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)] = time.time()
-                    self.logger.info("\t 3  New ARP Broading casting. Added (%s %s %s): %s to self.packetToport and Forwarding ARP Broadcasting" %
-                                     (etherFrame.src, arp_dstIP, inPort, time.time()))
-                    test = True
-                    return test
-            return test
+            elif ((etherFrame.src, arp_dstIP, inPort) not in self.packetToport[datapath.id].keys()):
+                    # self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)] = received_time
+                    # self.logger.info("\tRule 5:  New ARP Broading casting. Added (%s %s %s): %s to self.packetToport and Forwarding ARP Broadcasting" %
+                    #                (etherFrame.src, arp_dstIP, inPort, received_time))
+                    # same ARP broadcast but from inport number is diffeernt from original port nubmer, block
+                    for keys in self.packetToport[datapath.id].keys():
+                        if ((etherFrame.src, arp_dstIP) == keys[0:2]) and (inPort != keys[2]):
+                            self.logger.info("\tRule 4: same ARP packet coming from differe port. So not Forwarding ARP Broadcasting. Detail: (%s %s %s): %s" %
+                                             (etherFrame.src, arp_dstIP, inPort, received_time))
+                            # add this entry, avoid if else checking next time
+                            # self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)] = received_time
+                            test = False
+                            return test
+                        else:
+                            self.logger.info("\tRule 5:  New ARP Broading casting. Added (%s %s %s): %s to self.packetToport and Forwarding ARP Broadcasting" %
+                                             (etherFrame.src, arp_dstIP, inPort, received_time))
+                            self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)] = received_time
+                            test = True
+                            return test
+        else:
+            self.logger.info("\tRule 1000: UNKOWN SITUATION OR MAYBE JUST A REGULAR ARP REQUEST!!!!!")
+            return True
+
+            # same ARP broadcast but from inport number is diffeernt from original port nubmer, block
+            # for keys in self.packetToport[datapath.id].keys():
+            #     if ((etherFrame.src, arp_dstIP) == keys[0:2]) and (inPort != keys[2]):
+            #         self.logger.info("\tRule 4: same ARP packet coming from differe port. So not Forwarding ARP Broadcasting. Detail: (%s %s %s): %s" %
+            #                          (etherFrame.src, arp_dstIP, inPort, received_time))
+            # add this entry, avoid if else checking next time
+            # self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)] = received_time
+            #         test = False
+            #         return test
+            # if ((etherFrame.src, arp_dstIP, inPort) not in self.packetToport[datapath.id].keys()):
+            #     self.packetToport[datapath.id][(etherFrame.src, arp_dstIP, inPort)] = received_time
+            #     self.logger.info("\tRule 5:  New ARP Broading casting. Added (%s %s %s): %s to self.packetToport and Forwarding ARP Broadcasting" %
+            #                      (etherFrame.src, arp_dstIP, inPort, received_time))
+            #     test = True
+            #     return test
+            # return test
+
+    def flood_arp(self, datapath, etherFrame, arpPacket, arp_dstIp, inPort, data):
+        pass
 
     def reply_arp(self, datapath, etherFrame, arpPacket, arp_dstIp, inPort, data):
-        # self.logger.info("flood")
+        self.logger.info("MySimpleArp: Reply_ARP:")
         dst = etherFrame.dst
         dpid = hex(datapath.id)
         if dst in self.mac_to_port[dpid]:
             out_port = self.mac_to_port[dpid][dst]
-            self.logger.info("\t reply_arp: Reply To Port %s !!!!!!!!!!!!!!!!!" % out_port)
+            self.logger.info("\tSend To Port %s !!!!!!!!!!!!!!!!!" % out_port)
         else:
             out_port = datapath.ofproto.OFPP_FLOOD
-            self.logger.info("\t reply_arp: Flooding...")
+            self.logger.info("\tFlooding...")
 
         actions = [datapath.ofproto_parser.OFPActionOutput(out_port)]
         out = datapath.ofproto_parser.OFPPacketOut(datapath=datapath, buffer_id=0xffffffff,

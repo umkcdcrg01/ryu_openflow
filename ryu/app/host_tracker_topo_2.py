@@ -51,17 +51,17 @@ class HostTracker(app_manager.RyuApp):
     def _update(self):
         # wait fof around 10s until all the swtiches connected to controller
         self._update_host_switch_file()
-        hub.sleep(2)
+        hub.sleep(0.5)
         while True:
             self._update_host_switch_file()
-            hub.sleep(2)
+            hub.sleep(0.5)
 
     def _update_host_switch_file(self):
-        self.logger.info("HostTracker: _update_host_switch_file")
+        self.logger.debug("HostTracker: _update_host_switch_file")
         with open(OFP_HOST_SWITCHES_LIST, 'w') as outp:
             for srcIP, val in self.hosts.items():
                 # print "\t", srcIP, val['dpid'], val['port'], val['mac']
-                self.logger.info("\t %s %s %s %s" % (srcIP, val['dpid'], val['port'], val['mac']))
+                self.logger.debug("\t %s %s %s %s" % (srcIP, val['dpid'], val['port'], val['mac']))
                 outp.write("%s %s %s %s\n" % (srcIP, val['dpid'], val['port'], val['mac']))
         shutil.copyfile(OFP_HOST_SWITCHES_LIST, OFP_HOST_SWITCHES_LIST_BACK)
         self.logger.debug("Updated ofp_host_switches_list_backup file")
@@ -118,8 +118,8 @@ class HostTracker(app_manager.RyuApp):
         if dst != LLDP_MAC_NEAREST_BRIDGE:
             # print "LLDP Packet:"
             if eth.ethertype == ether.ETH_TYPE_ARP:
-                self.logger.info("HostTracker: packet_in_handler")
-                self.logger.info("\t packet in %s %s %s %s", hex(datapath.id), eth.src, eth.dst, in_port)
+                # self.logger.info("HostTracker: packet_in_handler")
+                # self.logger.info("\t packet in %s %s %s %s", hex(datapath.id), eth.src, eth.dst, in_port)
                 arp_pkt = pkt.get_protocols(arp.arp)[0]
                 srcMac = arp_pkt.src_mac
                 srcIP = arp_pkt.src_ip
