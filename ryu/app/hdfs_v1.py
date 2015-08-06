@@ -140,7 +140,7 @@ class HDFSController(app_manager.RyuApp):
             if pkt_tcp:
                 src_port = pkt_tcp.src_port
                 dst_port = pkt_tcp.dst_port
-            if str(src_port) == '54310':
+            if str(dst_port) == '54310':
                 key = (src_ip, dst_ip, src_mac, dst_mac, dst_port)
                 self.logger.debug("HDFSController: Packet-In:")
                 self.logger.info("\t############################# HDFS Traffic #####################################")
@@ -178,7 +178,7 @@ class HDFSController(app_manager.RyuApp):
                 hosts = [dst_mac, src_mac]
                 # find shortest path between two switches, a list of hostnames ['s1','s2','s3']
                 shortest_path = self.util.return_shortest_path(dst_dpid_name, src_dpid_name)
-                
+
                 # install flows between hosts and switch
                 # self.install_flows_for_hosts_and_attached_switches(hosts, shortest_path, src_ip, dst_ip, src_port, dst_port, src_mac, dst_mac, msg)
 

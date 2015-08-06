@@ -1,4 +1,4 @@
-# 8031_v1.py
+# resource_scheduler_v1.py
 #  Shuai Jack Zhao
 # hdfs file system
 # in_port=int(inport), eth_dst=dst_mac, eth_src=src_mac, eth_type=0x0800, ipv4_src=src_ip,
@@ -71,14 +71,14 @@ HDFS_IDLE_TIMER = 0
 HDFS_HARD_TIMER = 0
 
 
-class ResourceTracker(app_manager.RyuApp):
+class ResourceScheduler(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
     _CONTEXTS = {
         'dpset': dpset.DPSet,
     }
 
     def __init__(self, *args, **kwargs):
-        super(ResourceTracker, self).__init__(*args, **kwargs)
+        super(ResourceScheduler, self).__init__(*args, **kwargs)
         self.mac_to_port = {}
         self.dpset = kwargs['dpset']
         self.datapaths = {}
@@ -127,7 +127,7 @@ class ResourceTracker(app_manager.RyuApp):
             return
         else:
             pass
-            self.logger.debug("ResourceTracker: Packet-In:")
+            self.logger.debug("ResourceScheduler: Packet-In:")
             # self.logger.info("\tether_packet: at %s %s " % (self.util.hostname_Check(datapath.id), pkt_ethernet))
 
         pkt_arp = pkt.get_protocol(arp.arp)
@@ -147,10 +147,10 @@ class ResourceTracker(app_manager.RyuApp):
             if pkt_tcp:
                 src_port = pkt_tcp.src_port
                 dst_port = pkt_tcp.dst_port
-            if str(dst_port) == '8031' or str(dst_port) == '50010' :
+            if str(dst_port) == '8030' or str(dst_port) == '54311':
                 key = (src_ip, dst_ip, src_mac, dst_mac, dst_port)
-                self.logger.debug("ResourceTracker: Packet-In:")
-                self.logger.info("\t############################# Resource_tracker Traffic #####################################")
+                self.logger.debug("ResourceScheduler: Packet-In:")
+                self.logger.info("\t############################# Resource_Scheduler Traffic #####################################")
                 self.logger.info("\tAt %s from %s to %s from src_port %s to dst_port %s from  port %s src_mac %s dst_mac %s" %
                                  (self.util.hostname_Check(datapath.id), src_ip, dst_ip, src_port, dst_port, in_port, src_mac, dst_mac))
                 if key not in self.ssh_learning.keys():

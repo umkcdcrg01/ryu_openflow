@@ -103,9 +103,9 @@ class MySimpleArp(app_manager.RyuApp):
         data = msg.data
 
         # print mac_to_port for verification
-        self.logger.info("MySimpleArp: self.mac_to_port")
-        for key, value in self.mac_to_port.items():
-            print "\t", self._hostname_Check(int(str(key), 16)), value
+        # self.logger.info("MySimpleArp: self.mac_to_port")
+        # for key, value in self.mac_to_port.items():
+        #     print "\t", self._hostname_Check(int(str(key), 16)), value
 
         etherFrame = packets.get_protocol(ethernet)
 
