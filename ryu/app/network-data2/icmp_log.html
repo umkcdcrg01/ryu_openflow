@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+    <script src="http://code.jquery.com/jquery-1.7.2.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.5/d3.min.js"></script>
+  <style>
+
+    body {
+      font: 12px sans-serif;
+    }
+
+    #icmp,  #icmp-reroute, #iperf {
+    padding: 5px;
+    text-align: center;
+    background-color: #e5eecc;
+    border: solid 1px #c3c3c3;
+    }
+
+    #icmp-id, #icmp-id-reroute, #iperf-id {
+        padding: 50px;
+        display: on;
+        font: 28px sans-serif;
+    }
+  </style>
+
+  <script> 
+    $(document).ready(function(){
+        $("#icmp").click(function(){
+            $("#icmp-id").slideToggle("slow");
+        });
+
+        $("#icmp-id").mouseenter(function(){
+          $("#icmp-id").css("color", "red");
+        });
+        $("#icmp-id").mouseleave(function(){
+          $("#icmp-id").css("color", "black");
+        });
+
+
+        $("#icmp-id-rerout").click(function(){
+            $("#icmp-id-rerout-id").slideToggle("slow");
+        });
+
+        $("#icmp-id-rerout-id").mouseenter(function(){
+          $("#icmp-id-rerout-id").css("color", "red");
+        });
+        $("#icmp-id-rerout-id").mouseleave(function(){
+          $("#icmp-id-rerout-id").css("color", "black");
+        });
+
+
+
+        $("#iperf").click(function(){
+            $("#iperf-id").slideToggle("slow");
+        });
+
+        $("#iperf-id").mouseenter(function(){
+          $("#iperf-id").css("color", "red");
+        });
+        $("#iperf-id").mouseleave(function(){
+          $("#iperf-id").css("color", "black");
+        });
+
+    });
+</script>
+<body>
+  
+<!--   
+    <div id='button'>
+    <button type="button" onclick="start1()">Change Content</button>
+  <div> -->
+
+    <script language="JavaScript">
+       
+    </script>
+
+  <div id="icmp"> <h2>ICMP LOG</h2> </div>
+  <div id="icmp-id" clas="icmp-class" font>
+  </div>
+  
+  <div id="icmp-reroute"> <h2>ICMP Reroute LOG</h2> </div>
+  <div id="icmp-id-reroute" clas="icmp-reroute-class" font>
+  </div>
+  
+  <div id="iperf"> <h2>Iperf LOG</h2> </div>
+  <div id="iperf-id" clas="iperf-id-class" font>
+  </div>
+
+  <script type="text/javascript">
+      function start1() {
+        $(document).ready(function(){
+            $.get('ofp_icmp_log.db', function(data) {
+                $('#icmp-id').empty();
+                //var lines = data.replace(/ /g, '          ');
+                var lines = data.replace(/\n/g,'</br>');    
+                $('#icmp-id').html(lines);
+               });
+      });
+    }
+
+    function start2() {
+        $(document).ready(function(){
+            $.get('ofp_icmp_reroute_log.db', function(data) {
+                $('#icmp-id-reroute').empty();
+                //var lines = data.replace(/ /g, '          ');
+                var lines = data.replace(/\n/g,'</br>');    
+                $('#icmp-id-reroute').html(lines);
+               });
+      });
+    }
+
+    function start3() {
+        $(document).ready(function(){
+            $.get('ofp_iperf_log.db', function(data) {
+                $('#iperf-id').empty();
+                //var lines = data.replace(/ /g, '          ');
+                var lines = data.replace(/\n/g,'</br>');    
+                $('#iperf-id').html(lines);
+               });
+      });
+    }
+
+        setInterval('start1()', 2000);
+        setInterval('start2()', 2000);
+        setInterval('start3()', 2000);
+
+
+
+  </script>
+
+
+</body>

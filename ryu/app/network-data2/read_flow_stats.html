@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+    <script src="http://code.jquery.com/jquery-1.7.2.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.5/d3.min.js"></script>
+  <style>
+
+    body {
+      font: 12px sans-serif;
+    }
+
+    #mdiv1, #mdiv2, #mdiv3, #mdiv4, #mdiv5, #mdivtest  {
+    padding: 5px;
+    text-align: center;
+    background-color: #e5eecc;
+    border: solid 1px #c3c3c3;
+    }
+
+    #myDiv1, #myDiv2, #myDiv3, #myDiv4, #myDiv5, #test {
+        padding: 50px;
+        display: on;
+        font: 28px sans-serif;
+    }
+  </style>
+
+  <script> 
+    $(document).ready(function(){
+        $("#mdiv1").click(function(){
+            $("#myDiv1").slideToggle("slow");
+        });
+
+        $("#mdiv2").click(function(){
+            $("#myDiv2").slideToggle("slow");
+        });
+
+        $("#mdiv3").click(function(){
+            $("#myDiv3").slideToggle("slow");
+        });
+
+        $("#mdiv4").click(function(){
+            $("#myDiv4").slideToggle("slow");
+        });
+
+        $("#mdiv5").click(function(){
+            $("#myDiv5").slideToggle("slow");
+        });
+
+        $("#mdivtest").click(function(){
+            $("#test").slideToggle("slow");
+        });
+
+
+        $("#myDiv1").mouseenter(function(){
+          $("#myDiv1").css("color", "red");
+        });
+        $("#myDiv1").mouseleave(function(){
+          $("#myDiv1").css("color", "black");
+        });
+
+
+        $("#myDiv2").mouseenter(function(){
+          $("#myDiv2").css("color", "red");
+        });
+        $("#myDiv2").mouseleave(function(){
+          $("#myDiv2").css("color", "black");
+        });
+
+
+        $("#myDiv3").mouseenter(function(){
+          $("#myDiv3").css("color", "red");
+        });
+        $("#myDiv3").mouseleave(function(){
+          $("#myDiv3").css("color", "black");
+        });
+
+        $("#myDiv4").mouseenter(function(){
+          $("#myDiv4").css("color", "red");
+        });
+        $("#myDiv4").mouseleave(function(){
+          $("#myDiv4").css("color", "black");
+        });
+
+
+        $("#myDiv5").mouseenter(function(){
+          $("#myDiv5").css("color", "red");
+        });
+        $("#myDiv5").mouseleave(function(){
+          $("#myDiv5").css("color", "black");
+        });
+
+        $("#test").mouseenter(function(){
+          $("#test").css("color", "red");
+        });
+        $("#test").mouseleave(function(){
+          $("#test").css("color", "black");
+        });
+    });
+</script>
+<body>
+  
+<!--   
+    <div id='button'>
+    <button type="button" onclick="start1()">Change Content</button>
+  <div> -->
+
+    <script language="JavaScript">
+       
+    </script>
+
+  <div id="mdiv1"> <h2>OVS 1</h2> </div>
+  <div id="myDiv1" clas="cmyDiv1" font>
+  </div>
+  
+  <div id="mdiv2"> <h2>OVS 2</h2> </div>
+  <div id="myDiv2" class="cmyDiv2">
+  </div>
+  
+  <div id="mdiv3"> <h2>OVS 3</h2> </div>
+  <div id="myDiv3" class="cmyDiv3">
+  </div>
+  
+
+  <div id="mdiv4"> <h2>OVS 4</h2> </div>
+  <div id="myDiv4" class="cmyDiv4">
+  </div>
+  
+  <div id="mdiv5"> <h2>OVS 5</h2> </div>
+  <div id="myDiv5" class="cmyDiv5">
+  </div>
+  
+
+ <div id="mdivtest"> <h2>Test</h2> </div>
+  <div id="test" class="ctest">
+  </div>
+  
+
+  <script type="text/javascript">
+      function start1() {
+        $(document).ready(function(){
+            $.get('ofp_switches_s1_flow_stats.db', function(data) {
+                $('#myDiv1').empty();
+                //var lines = data.replace(/ /g, '          ');
+                var lines = data.replace(/\n/g,'</br>');    
+                $('#myDiv1').html(lines);
+               });
+      });
+    }
+
+     function start2() {
+      $(document).ready(function(){
+        $.get('ofp_switches_s2_flow_stats.db', function(data) {
+              $('#myDiv2').empty()
+              //var lines = data.replace(/ /g, '          ');
+              var lines = data.replace(/\n/g,'</br>');    
+              $('#myDiv2').html(lines);
+               });
+      });
+    }
+     function start3() {
+      $(document).ready(function(){
+         $.get('ofp_switches_s3_flow_stats.db', function(data) {
+                  $('#myDiv3').empty()
+                  //var lines = data.replace(/ /g, '          ');
+                  var lines = data.replace(/\n/g,'</br>');    
+                  $('#myDiv3').html(lines);
+                   });
+        });
+    }
+     function start4() {
+      $(document).ready(function(){
+          $.get('ofp_switches_s4_flow_stats.db', function(data) {
+                  $('#myDiv4').empty()
+                  //var lines = data.replace(/ /g, '          ');
+                  var lines = data.replace(/\n/g,'</br>');    
+                  $('#myDiv4').html(lines);
+                   });
+        });
+    }
+     function start5() {
+      $(document).ready(function(){
+          $.get('ofp_switches_s5_flow_stats.db', function(data) {
+                  $('#myDiv5').empty()
+                  //var lines = data.replace(/ /g, '          ');
+                  var lines = data.replace(/\n/g,'</br>');    
+                  $('#myDiv5').html(lines);
+                   });
+        });
+    }
+    function test() {
+      $(document).ready(function(){
+          $.get('ofp_switches_list.db', function(data) {
+                  $('#test').empty()
+                  //var lines = data.replace(/ /g, '          ');
+                  var lines = data.replace(/\n/g,'</br>');    
+                  $('#test').html(lines);
+                   });
+        });
+    }
+
+       setInterval('start1()', 2000);
+       setInterval('start2()', 2000);
+       setInterval('start3()', 2000);
+       setInterval('start4()', 2000);
+       setInterval('start5()', 2000);
+       setInterval('test()', 1000);
+
+
+
+  </script>
+
+
+</body>

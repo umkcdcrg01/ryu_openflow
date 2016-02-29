@@ -1,0 +1,2 @@
+datapath         hostname         in-port     duration_sec   duration_nsec          eth-dst          out-port packets  bytes
+---------------- ---------------- -------- ---------------- -------------- ---------------- -------- -------- --------

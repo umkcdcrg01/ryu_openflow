@@ -1,0 +1,161 @@
+sudo /tmp/setup/hadoop-setup.sh
+
+import geni.portal as portal
+import geni.rspec.pg as RSpec
+import geni.rspec.igext
+
+pc = portal.Context()
+
+pc.defineParameter( "n", "Number of slave nodes",
+		    portal.ParameterType.INTEGER, 3 )
+
+pc.defineParameter( "raw", "Use physical nodes",
+                    portal.ParameterType.BOOLEAN, False )
+
+pc.defineParameter( "mem", "Memory per VM",
+		    portal.ParameterType.INTEGER, 256 )
+
+params = pc.bindParameters()
+
+class PublicVM(geni.rspec.igext.XenVM):
+  def __init__ (self, name, component_id = None, exclusive = False):
+    super(PublicVM, self).__init__(name)
+
+  def _write (self, root):
+    nd = super(PublicVM, self)._write(root)
+    nd.attrib["{http://www.protogeni.net/resources/rspec/ext/emulab/1}routable_control_ip"] = str( "" )
+    return nd
+
+def Node( name, public ):
+    if params.raw:
+        return RSpec.RawPC( name )
+    elif public:
+        vm = PublicVM( name )
+        vm.ram = params.mem
+        return vm
+    else:
+        vm = geni.rspec.igext.XenVM( name )
+        vm.ram = params.mem
+        return vm
+
+rspec = RSpec.Request()
+
+lan = RSpec.LAN()
+rspec.addResource( lan )
+
+node = Node( "namenode", True )
+node.disk_image = "https://www.apt.emulab.net/image_metadata.php?uuid=996fd08a-ce5b-11e4-8b63-2f7555356a5c"
+node.addService( RSpec.Install( "http://www.emulab.net/downloads/hadoop-setup.tar.gz", "/tmp" ) )
+node.addService( RSpec.Execute( "sh", "sudo /tmp/setup/hadoop-setup.sh" ) )
+iface = node.addInterface( "if0" )
+lan.addInterface( iface )
+rspec.addResource( node )
+
+node = Node( "resourcemanager", True )
+node.disk_image = "https://www.apt.emulab.net/image_metadata.php?uuid=996fd08a-ce5b-11e4-8b63-2f7555356a5c"
+node.addService( RSpec.Install( "http://www.emulab.net/downloads/hadoop-setup.tar.gz", "/tmp" ) )
+node.addService( RSpec.Execute( "sh", "sudo /tmp/setup/hadoop-setup.sh" ) )
+iface = node.addInterface( "if0" )
+lan.addInterface( iface )
+rspec.addResource( node )
+
+for i in range( params.n ):
+    node = Node( "slave" + str( i ), False )
+    node.disk_image = "https://www.apt.emulab.net/image_metadata.php?uuid=996fd08a-ce5b-11e4-8b63-2f7555356a5c"
+    node.addService( RSpec.Install( "http://www.emulab.net/downloads/hadoop-setup.tar.gz", "/tmp" ) )
+    node.addService( RSpec.Execute( "sh", "sudo /tmp/setup/hadoop-setup.sh" ) )
+    iface = node.addInterface( "if0" )
+    lan.addInterface( iface )
+    rspec.addResource( node )
+
+from lxml import etree as ET
+
+class Instructions(RSpec.Resource):
+    def _write( self, root ):
+        el = ET.SubElement( root, "{http://www.protogeni.net/resources/rspec/ext/apt-tour/1}rspec_tour" )
+        instructions = ET.SubElement( el, "{http://www.protogeni.net/resources/rspec/ext/apt-tour/1}instructions" )
+        instructions.text = "After your instance boots (approx. 5-10 minutes), you can log into the resource manager node and submit jobs.  [The HDFS web UI](http://{host-namenode}:50070/) and [the resource manager UI](http://{host-resourcemanager}:8088/) will also become available."
+        description = ET.SubElement( el, "{http://www.protogeni.net/resources/rspec/ext/apt-tour/1}description" )
+        description.text = "n/a"
+        return el
+
+instructions = Instructions()
+rspec.addResource( instructions )
+
+pc.printRequestRSpec( rspec )
+
+
+
+
+
+
+
+<rspec xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:client="http://www.protogeni.net/resources/rspec/ext/client/1" xmlns="http://www.geni.net/resources/rspec/3" xsi:schemaLocation="http://www.geni.net/resources/rspec/3 http://www.geni.net/resources/rspec/3/request.xsd" type="request"><rspec_tour xmlns="http://www.protogeni.net/resources/rspec/ext/apt-tour/1"><description xmlns="" type="markdown">A cluster running Hadoop 2.6.0.  It includes a name node, a resource manager, and as many slaves as you choose.</description><instructions xmlns="" type="markdown">After your instance boots (approx. 5-10 minutes), you can log into the resource manager node and submit jobs.  [The HDFS web UI](http://{host-namenode}:50070/) and [the resource manager UI](http://{host-resourcemanager}:8088/) will also become available.</instructions></rspec_tour>
+  <link client_id="link-1">
+    <interface_ref client_id="namenode:if0"/>
+    <interface_ref client_id="resourcemanager:if0"/>
+    <interface_ref client_id="slave0:if0"/>
+    <interface_ref client_id="slave1:if0"/>
+    <interface_ref client_id="slave2:if0"/>
+    <link_type name="lan"/>
+  </link>
+  <node xmlns:ns1="http://www.protogeni.net/resources/rspec/ext/emulab/1" client_id="namenode" exclusive="false" ns1:routable_control_ip="">
+    <sliver_type name="emulab-xen">
+      <disk_image name="https://www.apt.emulab.net/image_metadata.php?uuid=996fd08a-ce5b-11e4-8b63-2f7555356a5c"/>
+      <ns0:xen xmlns:ns0="http://www.protogeni.net/resources/rspec/ext/emulab/1" cores="1" ram="256" disk="8"/>
+    </sliver_type>
+    <interface client_id="namenode:if0"/>
+    <services>
+      <install url="http://www.emulab.net/downloads/hadoop-setup.tar.gz" install_path="/tmp"/>
+      <execute shell="sh" command="sudo /tmp/setup/hadoop-setup.sh"/>
+    </services>
+  </node>
+  <node xmlns:ns3="http://www.protogeni.net/resources/rspec/ext/emulab/1" client_id="resourcemanager" exclusive="false" ns3:routable_control_ip="">
+    <sliver_type name="emulab-xen">
+      <disk_image name="https://www.apt.emulab.net/image_metadata.php?uuid=996fd08a-ce5b-11e4-8b63-2f7555356a5c"/>
+      <ns2:xen xmlns:ns2="http://www.protogeni.net/resources/rspec/ext/emulab/1" cores="1" ram="256" disk="8"/>
+    </sliver_type>
+    <interface client_id="resourcemanager:if0"/>
+    <services>
+      <install url="http://www.emulab.net/downloads/hadoop-setup.tar.gz" install_path="/tmp"/>
+      <execute shell="sh" command="sudo /tmp/setup/hadoop-setup.sh"/>
+    </services>
+  </node>
+  <node client_id="slave0" exclusive="false">
+    <sliver_type name="emulab-xen">
+      <disk_image name="https://www.apt.emulab.net/image_metadata.php?uuid=996fd08a-ce5b-11e4-8b63-2f7555356a5c"/>
+      <ns4:xen xmlns:ns4="http://www.protogeni.net/resources/rspec/ext/emulab/1" cores="1" ram="256" disk="8"/>
+    </sliver_type>
+    <interface client_id="slave0:if0"/>
+    <services>
+      <install url="http://www.emulab.net/downloads/hadoop-setup.tar.gz" install_path="/tmp"/>
+      <execute shell="sh" command="sudo /tmp/setup/hadoop-setup.sh"/>
+    </services>
+  </node>
+  <node client_id="slave1" exclusive="false">
+    <sliver_type name="emulab-xen">
+      <disk_image name="https://www.apt.emulab.net/image_metadata.php?uuid=996fd08a-ce5b-11e4-8b63-2f7555356a5c"/>
+      <ns5:xen xmlns:ns5="http://www.protogeni.net/resources/rspec/ext/emulab/1" cores="1" ram="256" disk="8"/>
+    </sliver_type>
+    <interface client_id="slave1:if0"/>
+    <services>
+      <install url="http://www.emulab.net/downloads/hadoop-setup.tar.gz" install_path="/tmp"/>
+      <execute shell="sh" command="sudo /tmp/setup/hadoop-setup.sh"/>
+    </services>
+  </node>
+  <node client_id="slave2" exclusive="false">
+    <sliver_type name="emulab-xen">
+      <disk_image name="https://www.apt.emulab.net/image_metadata.php?uuid=996fd08a-ce5b-11e4-8b63-2f7555356a5c"/>
+      <ns6:xen xmlns:ns6="http://www.protogeni.net/resources/rspec/ext/emulab/1" cores="1" ram="256" disk="8"/>
+    </sliver_type>
+    <interface client_id="slave2:if0"/>
+    <services>
+      <install url="http://www.emulab.net/downloads/hadoop-setup.tar.gz" install_path="/tmp"/>
+      <execute shell="sh" command="sudo /tmp/setup/hadoop-setup.sh"/>
+    </services>
+  </node>
+  <ns7:rspec_tour xmlns:ns7="http://www.protogeni.net/resources/rspec/ext/apt-tour/1">
+    <ns7:instructions>After your instance boots (approx. 5-10 minutes), you can log into the resource manager node and submit jobs.  [The HDFS web UI](http://{host-namenode}:50070/) and [the resource manager UI](http://{host-resourcemanager}:8088/) will also become available.</ns7:instructions>
+    <ns7:description>n/a</ns7:description>
+  </ns7:rspec_tour>
+</rspec>

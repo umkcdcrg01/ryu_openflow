@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+    <script src="http://code.jquery.com/jquery-1.7.2.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.5/d3.min.js"></script>
+  <style>
+
+    body {
+      font: 12px sans-serif;
+    }
+
+    #ssh,  #ssh-reroute, #iperf {
+    padding: 5px;
+    text-align: center;
+    background-color: #e5eecc;
+    border: solid 1px #c3c3c3;
+    }
+
+    #ssh-id, #ssh-id-reroute, #iperf-id {
+        padding: 50px;
+        display: on;
+        font: 28px sans-serif;
+    }
+  </style>
+
+  <script> 
+    $(document).ready(function(){
+        $("#ssh").click(function(){
+            $("#ssh-id").slideToggle("slow");
+        });
+
+        $("#ssh-id").mouseenter(function(){
+          $("#ssh-id").css("color", "red");
+        });
+        $("#ssh-id").mouseleave(function(){
+          $("#ssh-id").css("color", "black");
+        });
+
+    });
+</script>
+<body>
+  
+<!--   
+    <div id='button'>
+    <button type="button" onclick="start1()">Change Content</button>
+  <div> -->
+
+    <script language="JavaScript">
+       
+    </script>
+
+  <div id="ssh"> <h2>ssh LOG</h2> </div>
+  <div id="ssh-id" clas="ssh-class" font>
+  </div>
+
+  <script type="text/javascript">
+      function start1() {
+        $(document).ready(function(){
+            $.get('ofp_ssh_log.db', function(data) {
+                $('#ssh-id').empty();
+                //var lines = data.replace(/ /g, '          ');
+                var lines = data.replace(/\n/g,'</br>');    
+                $('#ssh-id').html(lines);
+               });
+      });
+    }
+        setInterval('start1()', 2000);
+
+
+
+
+  </script>
+
+
+</body>
